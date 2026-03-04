@@ -512,6 +512,36 @@ As PM, I wrote these to:
 
 ---
 
+## Engagement & Budget
+
+### Team & Timeline
+
+| Role | Allocation | Duration |
+|------|-----------|----------|
+| Lead PM (Jacob) | 20 hrs/week | 16 weeks |
+| Lead Developer (US) | 40 hrs/week | 16 weeks |
+| Offshore Developer(s) | 2 × 35 hrs/week | 16 weeks |
+| QA Engineer | 20 hrs/week | 16 weeks |
+
+**Timeline:** 16 weeks total across 3 phases
+- **Phase 1: Discovery & Design** (3 weeks) — Annotation workflow mapping, quality framework design, data model, integration requirements
+- **Phase 2: Core Build** (9 weeks) — Annotation engine, quality scoring, routing logic, workforce management, active learning pipeline
+- **Phase 3: Integration & Launch** (4 weeks) — LangSmith integration, dashboard buildout, QA, load testing, pilot rollout
+
+### Budget Summary
+
+| Category | Cost | Notes |
+|----------|------|-------|
+| PM & Strategy | $59,200 | Discovery, specs, stakeholder management |
+| Development (Lead + Offshore) | $161,600 | Core platform build |
+| QA | $11,200 | Quality assurance and testing |
+| AI/LLM Token Budget | $650/month | Claude Haiku for quality scoring + active learning suggestions, ~8M tokens/month |
+| Infrastructure | $580/month | Supabase Pro $25 + Temporal Cloud $100 + Redis $65 + n8n $50 + Trigger.dev $25 + AWS compute $200 + Grafana $25 + misc $90 |
+| **Total Engagement** | **$225,000** | Fixed-price, phases billed at milestones |
+| **Ongoing Run Rate** | **$1,400/month** | Infrastructure + AI tokens + support |
+
+---
+
 ## Quick Start
 
 ### For Exploring the Code
