@@ -1,0 +1,77 @@
+graph LR
+    subgraph "Model Training"
+        TRAIN["Model Training<br/>v1"]
+        EVAL["Model Evaluation<br/>on test set"]
+        TRAIN -->|"Evaluate"| EVAL
+    end
+
+    subgraph "Error Analysis"
+        PERF["Per-slice Analysis<br/>- Low-light images<br/>- Medical abbreviations<br/>- Edge cases"]
+        ERRORS["Identify Failure<br/>Patterns<br/>- Common mistakes<br/>- Systematic bias"]
+        EVAL -->|"Analyze"| PERF
+        PERF -->|"Summarize"| ERRORS
+    end
+
+    subgraph "Targeted Re-Annotation"
+        REQUEST["Re-annotation Request<br/>- 500 low-light images<br/>- 200 abbreviations<br/>- 300 edge cases"]
+        ERRORS -->|"Generate request"| REQUEST
+    end
+
+    subgraph "Active Learning"
+        PREDICT["Model Predictions<br/>on Unlabeled Data<br/>- Model A: 90% confident<br/>- Model B: 50% confident<br/>- Model C: 45% confident"]
+        UNCERTAINTY["Uncertainty Sampling<br/>- High entropy items<br/>- Disagreement between<br/>  ensemble members"]
+        CURRICULUM["Curriculum Ranking<br/>1. Uncertain items<br/>2. Model errors<br/>3. Targeted failures"]
+        PREDICT -->|"Compute<br/>predictions"| UNCERTAINTY
+        UNCERTAINTY -->|"Rank by<br/>informativeness"| CURRICULUM
+    end
+
+    subgraph "Annotation Pipeline"
+        QUEUE["Priority Queue<br/>1. Targeted failures<br/>   (highest priority)<br/>2. Uncertain items<br/>   (medium priority)<br/>3. Random sampling<br/>   (lowest priority)"]
+        ANNOTATE["Multi-stage<br/>Annotation<br/>- Label<br/>- Review<br/>- Adjudicate"]
+        QUALITY["Quality Check<br/>- Agreement > 0.75<br/>- Golden set eval<br/>- Annotator accuracy"]
+        CONSENSUS["Consensus<br/>Resolution<br/>- Weighted vote<br/>- Expert tiebreak"]
+        CURRICULUM -->|"Ranked<br/>items"| QUEUE
+        REQUEST -->|"Add to<br/>queue"| QUEUE
+        QUEUE -->|"Assign"| ANNOTATE
+        ANNOTATE -->|"Measure<br/>quality"| QUALITY
+        QUALITY -->|"Resolve"| CONSENSUS
+    end
+
+    subgraph "Data Preparation"
+        CLEAN["Data Cleaning<br/>- Remove duplicates<br/>- Fix labels<br/>- Validate schema"]
+        BALANCE["Curriculum<br/>Construction<br/>- Balanced sampling<br/>- Hard example first<br/>- Stratified by slice"]
+        CONSENSUS -->|"Approved<br/>labels"| CLEAN
+        CLEAN -->|"Organize"| BALANCE
+    end
+
+    subgraph "Training Data"
+        TRAIN_DATA["Training Dataset<br/>v2<br/>- 10K examples<br/>- Includes targeted<br/>  failure fixes<br/>- Stratified curriculum"]
+        BALANCE -->|"Add to<br/>dataset"| TRAIN_DATA
+    end
+
+    subgraph "Measurement"
+        IMPROVEMENT["Measure Impact<br/>- Baseline F1: 0.82<br/>- With targeted labels<br/>  F1: 0.87<br/>- Delta: +5%"]
+        TRAIN_DATA -->|"Retrain"| TRAIN
+        EVAL -->|"Measure<br/>improvement"| IMPROVEMENT
+        IMPROVEMENT -->|"Data-to-model<br/>cycle time<br/>11 days"| TRAIN
+    end
+
+    subgraph "Drift Detection"
+        DRIFT["Distribution Monitoring<br/>- Production data<br/>- Training data<br/>- KL divergence"]
+        ANOMALY["Detect Drift<br/>- New patterns<br/>- Label shift<br/>- Covariate shift"]
+        DRIFT -->|"Compare<br/>distributions"| ANOMALY
+        ANOMALY -->|"Alert:<br/>500 edge-case<br/>transactions<br/>identified"| ERRORS
+    end
+
+    style TRAIN fill:#e3f2fd
+    style EVAL fill:#e3f2fd
+    style ERRORS fill:#fce4ec
+    style REQUEST fill:#fce4ec
+    style UNCERTAINTY fill:#fff3e0
+    style CURRICULUM fill:#fff3e0
+    style CONSENSUS fill:#e8f5e9
+    style QUALITY fill:#e8f5e9
+    style TRAIN_DATA fill:#c8e6c9
+    style IMPROVEMENT fill:#c8e6c9
+    style DRIFT fill:#ffebee
+    style ANOMALY fill:#ffebee

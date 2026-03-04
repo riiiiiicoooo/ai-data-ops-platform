@@ -1,0 +1,89 @@
+graph TB
+    subgraph "ML Teams / Data Scientists"
+        DS["Data Scientists<br/>- Need 10K labels<br/>- Want quality metrics<br/>- Need model feedback"]
+    end
+
+    subgraph "API Layer"
+        API["FastAPI Server<br/>- Async task routing<br/>- WebSocket annotations<br/>- OpenAPI docs"]
+    end
+
+    subgraph "Workflow Orchestration"
+        TEMPORAL["Temporal Server<br/>- Multi-stage workflows<br/>- Retry logic<br/>- Human-in-the-loop"]
+    end
+
+    subgraph "Task Management"
+        ROUTER["Task Router<br/>- Skill-weighted routing<br/>- Qualification gates<br/>- Priority scheduling"]
+        QUEUE["Priority Queue<br/>- Redis 7<br/>- Real-time assignment<br/>- Rate limiting"]
+        SCHEMA["Schema Registry<br/>- JSONB-based<br/>- Auto-metric selection<br/>- Validation rules"]
+    end
+
+    subgraph "Annotation Pipeline"
+        LABEL["Label<br/>1st stage<br/>Crowd"]
+        REVIEW["Review<br/>2nd stage<br/>Senior"]
+        ADJUDICATE["Adjudicate<br/>3rd stage<br/>Expert"]
+    end
+
+    subgraph "Quality Engine"
+        AGREEMENT["Agreement Calculator<br/>- Kappa, Alpha<br/>- IoU, Dice<br/>- Span F1, BLEU"]
+        CONSENSUS["Consensus Resolver<br/>- Majority vote<br/>- Weighted vote<br/>- Expert tiebreak"]
+        SCORER["Annotator Scorer<br/>- Rolling accuracy<br/>- Skill levels<br/>- Qualification"]
+        GOLDEN["Golden Set Evaluator<br/>- Calibration items<br/>- Accuracy baseline<br/>- Blind insertion"]
+    end
+
+    subgraph "Data Storage"
+        PG["PostgreSQL 15<br/>+ pgvector<br/>- Annotations<br/>- Task metadata<br/>- Audit trail<br/>- Embeddings"]
+        S3["S3 / Blob Storage<br/>- Raw assets<br/>- Images, audio<br/>- Point clouds<br/>- Documents"]
+    end
+
+    subgraph "Feedback Loop"
+        ACTIVE["Active Learner<br/>- Uncertainty sampling<br/>- Curriculum learning<br/>- Budget allocation"]
+        DRIFT["Drift Detector<br/>- Distribution compare<br/>- KL divergence<br/>- PSI analysis"]
+        EVALUATOR["Model Evaluator<br/>- Per-slice analysis<br/>- Error patterns<br/>- Targeted labels"]
+    end
+
+    subgraph "Observability"
+        DASHBOARD["Grafana Dashboard<br/>- Quality metrics<br/>- Throughput<br/>- Annotator health"]
+        LOGS["Logs & Audit Trail<br/>- All decisions<br/>- Compliance<br/>- Debugging"]
+    end
+
+    DS -->|"Create annotation<br/>task"| API
+    API -->|"Route to<br/>annotators"| ROUTER
+    ROUTER -->|"Priority queue<br/>assignment"| QUEUE
+    QUEUE -->|"Get next task"| LABEL
+
+    SCHEMA -->|"Validate output"| LABEL
+    LABEL -->|"Submit annotation"| REVIEW
+    REVIEW -->|"Approve or<br/>escalate"| ADJUDICATE
+    ADJUDICATE -->|"Final decision"| TEMPORAL
+
+    TEMPORAL -->|"Store result"| PG
+    TEMPORAL -->|"Compute agreement"| AGREEMENT
+    AGREEMENT -->|"Input to<br/>resolution"| CONSENSUS
+    CONSENSUS -->|"Consensus label"| PG
+
+    PG -->|"Accuracy baseline"| SCORER
+    PG -->|"Compare to expert"| GOLDEN
+    SCORER -->|"Update profiles"| ROUTER
+
+    PG -->|"Training data"| EVALUATOR
+    EVALUATOR -->|"Model errors"| ACTIVE
+    ACTIVE -->|"Uncertain items<br/>to annotate"| ROUTER
+
+    PG -->|"Embeddings"| DRIFT
+    DRIFT -->|"Distribution<br/>changes"| EVALUATOR
+
+    PG -->|"Metrics"| DASHBOARD
+    QUEUE -->|"Queue health"| DASHBOARD
+    CONSENSUS -->|"Resolution rate"| DASHBOARD
+
+    S3 -->|"Retrieve assets"| API
+
+    style DS fill:#e1f5ff
+    style API fill:#fff3e0
+    style TEMPORAL fill:#f3e5f5
+    style AGREEMENT fill:#e8f5e9
+    style CONSENSUS fill:#e8f5e9
+    style GOLDEN fill:#e8f5e9
+    style ACTIVE fill:#fce4ec
+    style PG fill:#fafafa
+    style DASHBOARD fill:#f1f8e9

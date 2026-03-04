@@ -1,0 +1,168 @@
+version: '3.9'
+
+services:
+  # PostgreSQL 15 with pgvector extension for embedding-based search
+  postgres:
+    image: pgvector/pgvector:pg15-latest
+    container_name: ai-data-ops-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-dataops}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dataops_dev_password}
+      POSTGRES_DB: ${DB_NAME:-annotation_db}
+      POSTGRES_INITDB_ARGS: "-c max_connections=200"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./init/seed_data.sql:/docker-entrypoint-initdb.d/02-seed_data.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dataops}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dataops-network
+
+  # Redis 7 for task queue and real-time updates
+  redis:
+    image: redis:7-alpine
+    container_name: ai-data-ops-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dataops-network
+
+  # Temporal server for workflow orchestration
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: ai-data-ops-temporal
+    environment:
+      TEMPORAL_PORT: 7233
+      TEMPORAL_GRPC_PORT: 7233
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      DB: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: ${TEMPORAL_DB_USER:-temporal}
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:-temporal_dev_password}
+      POSTGRES_DB: ${TEMPORAL_DB_NAME:-temporal}
+      # Temporal server config
+      TEMPORAL_LOG_LEVEL: info
+      SERVICES: frontend,matching,history,worker
+    ports:
+      - "7233:7233"  # gRPC
+      - "8233:8233"  # HTTP
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8233/api/namespaces"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dataops-network
+
+  # FastAPI application server
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-data-ops-api
+    environment:
+      # Database
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-annotation_db}
+      DB_USER: ${DB_USER:-dataops}
+      DB_PASSWORD: ${DB_PASSWORD:-dataops_dev_password}
+
+      # Redis
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_dev_password}
+
+      # Temporal
+      TEMPORAL_HOST: ${TEMPORAL_HOST:-temporal}
+      TEMPORAL_PORT: ${TEMPORAL_PORT:-7233}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+
+      # Application
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      API_PORT: 8000
+      API_WORKERS: ${API_WORKERS:-4}
+
+      # S3 (optional for storage)
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-ai-data-ops-dev}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dataops-network
+
+  # Optional: pgAdmin for database management (development only)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ai-data-ops-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - dataops-network
+    profiles:
+      - dev  # Only run with: docker-compose --profile dev up
+
+  # Optional: Grafana for metrics dashboard (development only)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ai-data-ops-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - postgres
+    networks:
+      - dataops-network
+    profiles:
+      - dev  # Only run with: docker-compose --profile dev up
+
+volumes:
+  postgres_data:
+  redis_data:
+  grafana_data:
+
+networks:
+  dataops-network:
+    driver: bridge

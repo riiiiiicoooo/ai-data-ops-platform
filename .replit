@@ -1,0 +1,16 @@
+run = "python demo/run_demo.py"
+language = "python3"
+entrypoint = "demo/run_demo.py"
+
+modules = ["python3", "postgresql", "redis"]
+
+[env]
+PYTHON_VERSION = "3.11"
+PGHOST = "localhost"
+PGPORT = "5432"
+PGDATABASE = "aidata"
+PGUSER = "postgres"
+REDIS_URL = "redis://localhost:6379"
+
+[nix]
+channel = "nixpkgs-unstable"

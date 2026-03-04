@@ -1,0 +1,363 @@
+# AI Data Operations Platform - Cursor Rules
+
+## Project Overview
+
+**AI Data Operations Platform**: End-to-end infrastructure for managing training data quality at scale. Handles task design, workforce routing, multi-stage annotation, consensus resolution, and model feedback loops. Enables ML teams to systematize the 60-80% of work that isn't model development.
+
+**Key Achievement**: Reduced annotation error rates from 12% to 2.8%, cut pipeline cycle time by 65%, and enabled 3x faster model iterations.
+
+## Tech Stack
+
+### Core Infrastructure
+- **Language**: Python 3.11+
+- **API Framework**: FastAPI (async, WebSocket support, auto-generated OpenAPI docs)
+- **Workflow Orchestration**: Temporal (formerly Uber Cadence) - multi-stage durable workflows with human-in-the-loop
+- **Database**: PostgreSQL 15 + pgvector extension (for embedding-based search)
+- **Cache/Queue**: Redis 7 (task distribution, real-time leaderboards, rate limiting)
+- **Storage**: S3/Azure Blob (raw assets: images, audio, point clouds)
+- **Metrics**: Grafana + PostgreSQL (quality metrics, throughput dashboards)
+
+### Modern Tooling (Upgraded)
+- **Task Scheduling**: Trigger.dev (replaces Temporal for simpler jobs, better DX)
+- **Workflows as Code**: n8n (visual + JSON, webhook triggers, conditional branching)
+- **Email**: Resend (transactional email with React templates)
+- **Database**: Supabase (PostgreSQL with RLS policies, real-time subscriptions)
+- **Deployment**: Vercel (Next.js frontend, serverless functions)
+- **Instant Runnable**: Replit (one-click development environment)
+
+### Quality/ML
+- **Agreement Metrics**: scikit-learn + NumPy (Cohen's kappa, Krippendorff's alpha, IoU, Dice, span F1, BLEU)
+- **Active Learning**: Custom entropy-based uncertainty sampling
+- **Vector Search**: pgvector for embedding similarity and curriculum construction
+
+## Architecture Decisions
+
+### 1. JSONB-Based Configurable Schemas
+Why: Healthcare NER, RLHF preference pairs, and LiDAR segmentation have fundamentally different structures. JSONB avoids database migrations per industry.
+
+### 2. Multi-Metric Agreement Engine
+Why: Cohen's kappa works for classification but not NER spans or bounding boxes. Different types need different metrics.
+
+### 3. Skill-Weighted Task Routing with Qualification Gates
+Why: Radiology tasks routed to unqualified annotators produce bad data. Skill-based routing with mandatory qualification ensures quality.
+
+### 4. Configurable Multi-Stage Workflows
+Why: RLHF safety needs 3 stages (label, review, expert adjudication). Product categorization needs 1 stage with sampling. Workflow is configurable per project.
+
+### 5. Uncertainty Sampling for Active Learning
+Why: Random re-annotation wastes budget. Uncertainty sampling targets the decision boundary where labels have highest marginal value.
+
+### 6. Majority Vote + Expert Tiebreak for Consensus
+Why: Majority vote surfaces genuine ambiguity. Expert tiebreak only fires when needed, preserving expert time.
+
+## Directory Structure
+
+```
+src/
+├── task_engine/
+│   ├── schema_registry.py       # JSONB schema management
+│   ├── task_router.py           # Skill-weighted task assignment
+│   └── queue_manager.py         # Priority queue with deadline awareness
+├── annotation/
+│   ├── workflow_orchestrator.py # Multi-stage workflows (Temporal or Trigger.dev)
+│   ├── consensus_resolver.py    # Majority vote + expert tiebreak
+│   └── annotation_validator.py  # Schema validation
+├── quality/
+│   ├── agreement_calculator.py  # 7 metrics: kappa, alpha, IoU, Dice, F1, BLEU
+│   ├── annotator_scorer.py      # Per-annotator accuracy tracking
+│   └── golden_set_evaluator.py  # Calibration items and gold standards
+└── feedback/
+    ├── active_learner.py        # Uncertainty sampling + curriculum
+    ├── drift_detector.py        # Distribution shift detection
+    └── model_evaluator.py       # Per-slice error analysis
+
+tests/
+├── test_agreement_calculator.py
+└── test_consensus_resolver.py
+
+docs/
+├── PRD.md                       # Product requirements document
+├── ARCHITECTURE.md              # System design
+├── DATA_MODEL.md                # Database schema
+├── METRICS.md                   # Success metrics
+├── DECISION_LOG.md              # Key decisions
+└── ROADMAP.md                   # Phased delivery
+
+Modern Tooling:
+├── supabase/
+│   └── migrations/
+│       └── 001_initial_schema.sql
+├── n8n/
+│   ├── annotation_quality_pipeline.json
+│   └── active_learning_trigger.json
+├── trigger-jobs/
+│   ├── quality_scoring.ts
+│   └── active_learning.ts
+├── emails/
+│   ├── quality_report.tsx
+│   └── assignment_notification.tsx
+├── .cursorrules                 # This file
+├── .env.example
+├── .replit
+├── replit.nix
+└── vercel.json
+```
+
+## Coding Conventions
+
+### Python Style
+- **Format**: Black (line length: 88)
+- **Linting**: Flake8 + isort
+- **Type Hints**: Full type hints on all functions and class methods
+- **Docstrings**: Google-style docstrings with sections: Summary, Args, Returns, Raises, Example
+- **Naming**: snake_case for functions/variables, PascalCase for classes
+- **Imports**: Group standard library, third-party, local (isort compatible)
+
+Example:
+```python
+def calculate_agreement(
+    annotations: dict[str, list[str]],
+    metric_type: str = "kappa"
+) -> AgreementScore:
+    """Calculate inter-annotator agreement.
+
+    Args:
+        annotations: Mapping of annotator IDs to their labels.
+        metric_type: Type of metric ("kappa", "alpha", "iou").
+
+    Returns:
+        AgreementScore with metric, score, and interpretation.
+
+    Raises:
+        ValueError: If metric_type is unsupported.
+
+    Example:
+        >>> result = calculate_agreement(
+        ...     {"ann1": ["A", "B"], "ann2": ["A", "B"]},
+        ...     metric_type="kappa"
+        ... )
+        >>> result.score
+        1.0
+    """
+```
+
+### TypeScript/React Style
+- **Format**: Prettier (120 char line length)
+- **Linting**: ESLint with TypeScript plugin
+- **Type Hints**: Strict TypeScript, no `any`
+- **React**: Functional components, hooks, proper prop typing
+- **Email Templates**: Use Resend React Email components
+
+Example:
+```typescript
+interface TaskAssignment {
+  taskId: string;
+  annotatorId: string;
+  priority: "high" | "medium" | "low";
+  deadline: Date;
+}
+
+async function assignTasks(
+  assignments: TaskAssignment[]
+): Promise<void> {
+  // Implementation
+}
+```
+
+## Common Tasks
+
+### Adding a New Annotation Type
+1. Define schema in `schema_registry.py` with validation rules
+2. Select appropriate agreement metric in `agreement_calculator.py`
+3. Add metric calculation if needed (e.g., new IoU variant for 3D boxes)
+4. Create task template in task engine with routing rules
+5. Add test cases in `tests/` directory
+6. Document in `docs/DATA_MODEL.md`
+
+### Extending Quality Metrics
+1. Implement metric method in `AgreementCalculator` class
+2. Add interpretation logic (strong/moderate/fair/poor)
+3. Add edge case handling (empty data, mismatched lengths)
+4. Create test cases in `test_agreement_calculator.py`
+5. Update metric selection logic based on annotation type
+
+### Creating a Workflow Step
+1. Define step as Temporal activity or Trigger.dev task
+2. Add error handling and retry logic
+3. Implement checkpointing for long-running steps
+4. Create corresponding n8n node if needed for UI workflow
+5. Add monitoring/logging for observability
+
+### Adding a Database Migration
+1. Create timestamped file in `supabase/migrations/`
+2. Write migration SQL with rollback plan
+3. Update RLS policies if needed
+4. Run locally: `supabase migration up`
+5. Test with existing data
+
+### Creating an Email Template
+1. Use Resend React Email components
+2. Follow project color scheme and branding
+3. Ensure responsive (mobile + desktop)
+4. Export as React component
+5. Import and render in email job
+
+### Setting Up Trigger.dev Jobs
+1. Create TypeScript file in `trigger-jobs/`
+2. Use `@trigger.dev/sdk` for job definition
+3. Include proper error handling and retries
+4. Add checkpointing between steps
+5. Export job for registration
+
+## Key Files and Purposes
+
+### Core Logic
+- **`agreement_calculator.py`**: Heart of quality measurement. Implements 7 metrics, auto-selects based on type.
+- **`consensus_resolver.py`**: Converts votes to final labels. Majority vote, weighted by accuracy, expert tiebreak.
+- **`task_router.py`**: Assigns tasks to annotators based on skill, qualification, capacity.
+- **`active_learner.py`**: Identifies uncertain samples for targeted annotation to improve models faster.
+
+### Data Layer
+- **`schema_registry.py`**: Defines what can be annotated (JSONB flexibility).
+- **`001_initial_schema.sql`**: Supabase schema with tables, indexes, RLS policies.
+
+### Workflows
+- **`annotation_quality_pipeline.json`**: n8n workflow for batch quality scoring.
+- **`active_learning_trigger.json`**: n8n workflow for daily uncertain sample selection.
+- **`quality_scoring.ts`**: Trigger.dev job for computing quality metrics.
+- **`active_learning.ts`**: Trigger.dev job for sample selection and task creation.
+
+### Communication
+- **`quality_report.tsx`**: Email template showing batch quality summary.
+- **`assignment_notification.tsx`**: Email when annotators get new tasks.
+
+### Configuration
+- **`.cursorrules`**: Project context (this file).
+- **`.env.example`**: Environment variables and secrets.
+- **`vercel.json`**: Deployment configuration.
+- **`.replit` + `replit.nix`**: One-click development environment.
+
+## Testing Strategy
+
+### Unit Tests
+- Each metric implementation has 30+ test cases (perfect agreement, partial, edge cases)
+- Consensus resolver tested with all vote distributions
+- Schema validation tested with valid and invalid inputs
+
+### Integration Tests
+- Task creation → routing → assignment workflow
+- Quality check → escalation pipeline
+- Active learning sample selection
+
+Run tests:
+```bash
+pytest tests/ -v                          # All tests
+pytest tests/test_agreement_calculator.py -v  # Specific file
+pytest tests/ --cov=src --cov-report=html    # With coverage
+```
+
+## Metrics That Matter
+
+### North Star
+- **Usable training examples per team-day**: Only examples passing quality checks count. Direct link to ML team velocity.
+
+### Quality Metrics
+- Annotation error rate (target: < 3%)
+- Inter-annotator agreement - kappa (target: > 0.80)
+- Golden set accuracy (target: > 95%)
+- Consensus resolution rate without expert escalation (target: > 85%)
+
+### Throughput Metrics
+- Annotations per annotator per hour (target: 45+)
+- Task assignment latency (target: < 2 seconds)
+- Pipeline cycle time: submit to usable (target: < 2 days)
+
+### Model Impact
+- Data-to-model update cycle (target: < 2 weeks)
+- Active learning efficiency vs. random (target: 2x)
+
+## Deployment
+
+### Local Development
+```bash
+make setup              # Install dependencies
+make docker-up         # Start Postgres, Redis, Temporal
+make test              # Run test suite
+make lint              # Check code quality
+```
+
+### Replit (One-Click)
+- Use `.replit` and `replit.nix` for instant environment
+- All dependencies: Python 3.11, PostgreSQL, Redis
+- Pre-configured to run `python demo/run_demo.py`
+
+### Supabase
+- Migrations auto-run in `supabase/migrations/`
+- RLS policies enforce row-level security
+- pgvector enables embedding search
+
+### Trigger.dev
+- Jobs in `trigger-jobs/` auto-register
+- Webhook triggers from n8n workflows
+- Email notifications via Resend
+
+### Vercel
+- Deploy Next.js frontend from `pages/` directory
+- Serverless functions in `api/` directory
+- Environment variables from `.env` (Supabase, Redis, API keys)
+
+## Performance Considerations
+
+- **Task Assignment**: Redis for sub-millisecond queue operations
+- **Quality Calculation**: Vectorized NumPy for 1000s of annotations
+- **Similarity Search**: pgvector indexes for embedding lookups
+- **Workflow Execution**: Temporal/Trigger.dev handles failure recovery
+
+## Security & Compliance
+
+- **Row-Level Security (RLS)**: Annotators see only their assigned tasks
+- **Audit Trail**: All decisions logged in PostgreSQL
+- **Data Handling**: Per-industry compliance (HIPAA, FedRAMP, SOX)
+- **Authentication**: Clerk for SSO/passwordless login
+
+## Common Patterns
+
+### Adding a Webhook Trigger
+1. Create n8n workflow with webhook node
+2. Expose URL in API environment
+3. POST JSON payload to webhook
+4. n8n processes and branches based on IF conditions
+5. Final step: Supabase update + email via Resend
+
+### Computing Quality on Batch Completion
+1. Batch reaches threshold in queue (e.g., 100 annotations)
+2. Webhook trigger fires `annotation_quality_pipeline.json`
+3. HTTP request to quality_scoring API
+4. Score checked against threshold
+5. If pass: mark usable, send report email
+6. If fail: escalate to expert review
+
+### Active Learning Loop
+1. Cron trigger (daily) in `active_learning_trigger.json`
+2. Query Supabase for model predictions with low confidence
+3. Sort by entropy / uncertainty
+4. Create annotation tasks for top-N uncertain samples
+5. Assign to available annotators based on skill
+6. Send assignment email via Resend
+7. Track model improvement vs. random baseline
+
+## Debugging Tips
+
+- Check Supabase RLS policies if queries return no rows
+- Use `EXPLAIN ANALYZE` for slow queries in pgvector search
+- Review Trigger.dev execution logs for job failures
+- Check n8n execution history for workflow branching issues
+- Verify `.env` variables match Replit secrets
+
+## References
+
+- `docs/ARCHITECTURE.md`: Full system design
+- `docs/DATA_MODEL.md`: Database schema and queries
+- `docs/METRICS.md`: Success measurement framework
+- `DEMO.md`: Complete walkthrough with examples
+- `CONTRIBUTING.md`: Developer guide

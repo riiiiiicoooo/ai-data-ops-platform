@@ -1,0 +1,336 @@
+{
+  "name": "Annotation Quality Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "webhook_trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "quality-batch-webhook",
+      "webhookUrl": "https://n8n.example.com/webhook/quality-batch"
+    },
+    {
+      "parameters": {
+        "url": "{{ $json.body.api_endpoint }}/quality/score-batch",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.TRIGGER_DEV_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParametersJson": "{\n  \"batch_id\": \"{{ $json.body.batch_id }}\",\n  \"annotations\": {{ $json.body.annotations | stringify }},\n  \"schema_type\": \"{{ $json.body.schema_type }}\"\n}"
+      },
+      "id": "http_quality_scoring",
+      "name": "HTTP Request - Quality Scoring API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "{{ $json.response.quality_score }}",
+              "operation": "gte",
+              "value2": "{{ $json.body.quality_threshold }}"
+            }
+          ]
+        }
+      },
+      "id": "if_quality_passed",
+      "name": "Quality Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "resendApi",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"from\": \"quality-reports@aidata.example.com\",\n  \"to\": \"{{ $json.body.report_email }}\",\n  \"subject\": \"✓ Batch Quality Report: {{ $json.body.batch_id }}\",\n  \"html\": \"<h1>Quality Report Passed</h1><p>Batch: {{ $json.body.batch_id }}</p><p>Score: {{ $json.response.quality_score }}</p>\"\n}"
+      },
+      "id": "resend_quality_passed_email",
+      "name": "Send Quality Passed Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.supabase.io/rest/v1/quality_scores",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "{{ $env.SUPABASE_ANON_KEY }}"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"project_id\": \"{{ $json.body.project_id }}\",\n  \"batch_id\": \"{{ $json.body.batch_id }}\",\n  \"batch_size\": {{ $json.body.annotations.length }},\n  \"completed_count\": {{ $json.body.annotations.length }},\n  \"avg_agreement_score\": {{ $json.response.avg_agreement_score }},\n  \"agreement_metric\": \"{{ $json.response.agreement_metric }}\",\n  \"golden_set_accuracy\": {{ $json.response.golden_set_accuracy }},\n  \"consensus_resolution_rate\": {{ $json.response.consensus_resolution_rate }},\n  \"passed_quality_check\": true,\n  \"status\": \"completed\"\n}"
+      },
+      "id": "supabase_update_quality_passed",
+      "name": "Supabase - Update Quality Scores (Passed)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#quality-alerts",
+        "text": "⚠️ Quality Alert: Batch {{ $json.body.batch_id }} failed quality check\nScore: {{ $json.response.quality_score }}\nThreshold: {{ $json.body.quality_threshold }}\nAction: Escalating to expert review",
+        "slackCredentialType": "predefinedCredentialType"
+      },
+      "id": "slack_notify_low_quality",
+      "name": "Slack Notification - Low Quality",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        850,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.supabase.io/rest/v1/annotation_tasks",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"status\": \"escalated\",\n  \"batch_id\": \"{{ $json.body.batch_id }}\"\n}"
+      },
+      "id": "supabase_escalate_tasks",
+      "name": "Supabase - Escalate Low Quality Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.resend.com/emails",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "resendApi",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"from\": \"alerts@aidata.example.com\",\n  \"to\": \"{{ $json.body.alert_email }}\",\n  \"subject\": \"⚠️ Low Quality Alert: Batch {{ $json.body.batch_id }}\",\n  \"html\": \"<h1>Quality Issue Detected</h1><p>Batch {{ $json.body.batch_id }} scored {{ $json.response.quality_score }}, below threshold {{ $json.body.quality_threshold }}</p><p>Tasks escalated for expert review.</p>\"\n}"
+      },
+      "id": "resend_quality_alert_email",
+      "name": "Send Low Quality Alert Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.resend.com/emails",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "resendApi",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"from\": \"reports@aidata.example.com\",\n  \"to\": \"{{ $json.body.report_email }}\",\n  \"subject\": \"Quality Pipeline Execution Summary - {{ $json.body.batch_id }}\",\n  \"html\": \"<h1>Pipeline Summary</h1><p>Batch ID: {{ $json.body.batch_id }}</p><p>Status: {{ $node.if_quality_passed.context.branching.true ? 'PASSED ✓' : 'FAILED ⚠️' }}</p><p>Quality Score: {{ $json.response.quality_score }}</p><p>Agreement Metric: {{ $json.response.agreement_metric }}</p>\"\n}"
+      },
+      "id": "resend_summary_email",
+      "name": "Send Summary Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "webhook_trigger": {
+      "main": [
+        [
+          {
+            "node": "http_quality_scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http_quality_scoring": {
+      "main": [
+        [
+          {
+            "node": "if_quality_passed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if_quality_passed": {
+      "main": [
+        [
+          {
+            "node": "resend_quality_passed_email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "supabase_update_quality_passed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "slack_notify_low_quality",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "supabase_escalate_tasks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "resend_quality_alert_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "resend_quality_passed_email": {
+      "main": [
+        [
+          {
+            "node": "resend_summary_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "supabase_update_quality_passed": {
+      "main": [
+        [
+          {
+            "node": "resend_summary_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "slack_notify_low_quality": {
+      "main": [
+        [
+          {
+            "node": "resend_summary_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "supabase_escalate_tasks": {
+      "main": [
+        [
+          {
+            "node": "resend_summary_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "resend_quality_alert_email": {
+      "main": [
+        [
+          {
+            "node": "resend_summary_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "annotation_quality_pipeline",
+  "tags": ["quality", "batch-processing"]
+}

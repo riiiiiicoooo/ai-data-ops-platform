@@ -1,0 +1,57 @@
+stateDiagram-v2
+    [*] --> Created: Task created
+
+    Created --> Assigned: Router assigns\nto annotators
+
+    Assigned --> Labeling: Annotators\nbegin work
+
+    Labeling --> LabelSubmitted: Annotation\nsubmitted
+
+    LabelSubmitted --> LabelValidated: Schema\nvalidation\npassed
+    LabelSubmitted --> LabelRejected: Validation\nerror
+    LabelRejected --> Labeling: Return for\ncorrection
+
+    LabelValidated --> OverlapCheck: Check if\nall annotators\ndone
+    OverlapCheck --> Review: All votes\nreceived
+    OverlapCheck --> AwaitingMore: Wait for\nmore annotators
+
+    AwaitingMore --> AwaitingMore: More\nannotations
+    AwaitingMore --> Review: Overlap\ncomplete
+
+    Review --> ComputeAgreement: Calculate\ninter-annotator\nagreement
+
+    ComputeAgreement --> ResolveConsensus: Weighted vote\nresolution
+
+    ResolveConsensus --> AutoResolved: Consensus\nreached\n(confidence >0.5)
+    ResolveConsensus --> NeedsTiebreak: No consensus\n(ambiguous)
+
+    AutoResolved --> QualityPass: Agreement\nabove threshold
+    AutoResolved --> QualityFail: Agreement\ntoo low
+    QualityFail --> Expert: Route to\nexpert queue
+
+    NeedsTiebreak --> Expert: Need expert\nadjudication
+
+    Expert --> ExpertReview: Expert reviews\nall votes
+
+    ExpertReview --> ExpertDecision: Expert\nresolves
+
+    ExpertDecision --> QualityPass: Expert\ndecision final
+
+    QualityPass --> Usable: Add to\ntraining data
+
+    Usable --> [*]: Complete
+
+    QualityFail --> Excluded: Remove from\ntraining data
+
+    Excluded --> [*]: Complete
+
+    style Created fill:#e3f2fd
+    style Labeling fill:#fff3e0
+    style Review fill:#f3e5f5
+    style ComputeAgreement fill:#e8f5e9
+    style ResolveConsensus fill:#e8f5e9
+    style Expert fill:#fce4ec
+    style QualityPass fill:#c8e6c9
+    style QualityFail fill:#ffcdd2
+    style Usable fill:#c8e6c9
+    style Excluded fill:#ffcdd2

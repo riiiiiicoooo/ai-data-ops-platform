@@ -110,6 +110,49 @@ The same platform engine serves fundamentally different use cases through config
 | **Database** | PostgreSQL 15 | Annotation data, task metadata, workforce profiles, quality metrics, audit trail. JSONB for flexible annotation schemas per industry. |
 | **Dashboard** | Grafana | Quality metrics, throughput tracking, workforce utilization, pipeline health. Accessible to ML leads and ops managers. |
 
+### Modern Stack (Upgraded Tooling)
+
+The platform includes modern infrastructure for faster development, instant runnable environments, and seamless deployment:
+
+| Layer | Technology | Why |
+|---|---|---|
+| **Database** | Supabase (PostgreSQL + RLS) | Managed PostgreSQL with Row-Level Security policies, real-time subscriptions, and built-in pgvector for embeddings. Zero infrastructure overhead. |
+| **Background Jobs** | Trigger.dev | Serverless durable jobs with better DX than Temporal. Replaces workflow orchestration for quality scoring and active learning pipelines. |
+| **Workflows as Code** | n8n | Visual + JSON-based workflow automation. Webhook triggers for batch processing, conditional logic for quality thresholds, Slack/email notifications. |
+| **Email** | Resend | React email components for professional transactional emails. Quality reports and task assignment notifications. |
+| **Authentication** | Clerk | SSO, passwordless, and OAuth. Managed user accounts, permissions, and security. |
+| **Deployment** | Vercel | Next.js deployment with serverless functions, environment management, and edge caching. |
+| **Development** | Replit | One-click runnable environment with all dependencies (Python 3.11, PostgreSQL, Redis). Instant sharing and collaboration. |
+| **Cache/Queue** | Upstash Redis | Serverless Redis for real-time task distribution, replacing local Redis. Auto-scaling, no maintenance. |
+
+### Live Demo & Quick Start
+
+**One-Click Launch:**
+[![Run on Replit](https://replit.com/badge/github/yourusername/ai-data-ops-platform)](https://replit.com/new/github/yourusername/ai-data-ops-platform)
+
+**Tech Stack Summary:**
+- Backend: Python 3.11 + FastAPI + Trigger.dev
+- Database: Supabase (PostgreSQL 15 + pgvector + RLS)
+- Frontend: Next.js + Clerk + Resend
+- Workflows: n8n (quality pipeline, active learning)
+- Deployment: Vercel (frontend) + Supabase (backend)
+- Dev Environment: Replit (instant setup)
+
+**Quick Start (3 steps):**
+```bash
+# 1. Clone and install
+git clone https://github.com/yourusername/ai-data-ops-platform.git
+cd ai-data-ops-platform
+pip install -r requirements.txt
+
+# 2. Set up environment variables
+cp .env.example .env.local
+# Fill in Supabase, Trigger.dev, Resend, Clerk keys
+
+# 3. Run the demo
+python demo/run_demo.py
+```
+
 ---
 
 ## Key Product Decisions
@@ -167,12 +210,229 @@ Combines annotation throughput with quality. Only examples that pass quality thr
 
 ---
 
+## System Architecture
+
+The platform's core components and data flows:
+
+```mermaid
+graph TB
+    subgraph "ML Teams / Data Scientists"
+        DS["Data Scientists<br/>- Need 10K labels<br/>- Want quality metrics<br/>- Need model feedback"]
+    end
+
+    subgraph "API Layer"
+        API["FastAPI Server<br/>- Async task routing<br/>- WebSocket annotations<br/>- OpenAPI docs"]
+    end
+
+    subgraph "Workflow Orchestration"
+        TEMPORAL["Temporal Server<br/>- Multi-stage workflows<br/>- Retry logic<br/>- Human-in-the-loop"]
+    end
+
+    subgraph "Task Management"
+        ROUTER["Task Router<br/>- Skill-weighted routing<br/>- Qualification gates<br/>- Priority scheduling"]
+        QUEUE["Priority Queue<br/>- Redis 7<br/>- Real-time assignment<br/>- Rate limiting"]
+        SCHEMA["Schema Registry<br/>- JSONB-based<br/>- Auto-metric selection<br/>- Validation rules"]
+    end
+
+    subgraph "Annotation Pipeline"
+        LABEL["Label<br/>1st stage<br/>Crowd"]
+        REVIEW["Review<br/>2nd stage<br/>Senior"]
+        ADJUDICATE["Adjudicate<br/>3rd stage<br/>Expert"]
+    end
+
+    subgraph "Quality Engine"
+        AGREEMENT["Agreement Calculator<br/>- Kappa, Alpha<br/>- IoU, Dice<br/>- Span F1, BLEU"]
+        CONSENSUS["Consensus Resolver<br/>- Majority vote<br/>- Weighted vote<br/>- Expert tiebreak"]
+        SCORER["Annotator Scorer<br/>- Rolling accuracy<br/>- Skill levels<br/>- Qualification"]
+        GOLDEN["Golden Set Evaluator<br/>- Calibration items<br/>- Accuracy baseline<br/>- Blind insertion"]
+    end
+
+    subgraph "Data Storage"
+        PG["PostgreSQL 15<br/>+ pgvector<br/>- Annotations<br/>- Task metadata<br/>- Audit trail<br/>- Embeddings"]
+        S3["S3 / Blob Storage<br/>- Raw assets<br/>- Images, audio<br/>- Point clouds<br/>- Documents"]
+    end
+
+    subgraph "Feedback Loop"
+        ACTIVE["Active Learner<br/>- Uncertainty sampling<br/>- Curriculum learning<br/>- Budget allocation"]
+        DRIFT["Drift Detector<br/>- Distribution compare<br/>- KL divergence<br/>- PSI analysis"]
+        EVALUATOR["Model Evaluator<br/>- Per-slice analysis<br/>- Error patterns<br/>- Targeted labels"]
+    end
+
+    subgraph "Observability"
+        DASHBOARD["Grafana Dashboard<br/>- Quality metrics<br/>- Throughput<br/>- Annotator health"]
+        LOGS["Logs & Audit Trail<br/>- All decisions<br/>- Compliance<br/>- Debugging"]
+    end
+
+    DS -->|"Create annotation<br/>task"| API
+    API -->|"Route to<br/>annotators"| ROUTER
+    ROUTER -->|"Priority queue<br/>assignment"| QUEUE
+    QUEUE -->|"Get next task"| LABEL
+
+    SCHEMA -->|"Validate output"| LABEL
+    LABEL -->|"Submit annotation"| REVIEW
+    REVIEW -->|"Approve or<br/>escalate"| ADJUDICATE
+    ADJUDICATE -->|"Final decision"| TEMPORAL
+
+    TEMPORAL -->|"Store result"| PG
+    TEMPORAL -->|"Compute agreement"| AGREEMENT
+    AGREEMENT -->|"Input to<br/>resolution"| CONSENSUS
+    CONSENSUS -->|"Consensus label"| PG
+
+    PG -->|"Accuracy baseline"| SCORER
+    PG -->|"Compare to expert"| GOLDEN
+    SCORER -->|"Update profiles"| ROUTER
+
+    PG -->|"Training data"| EVALUATOR
+    EVALUATOR -->|"Model errors"| ACTIVE
+    ACTIVE -->|"Uncertain items<br/>to annotate"| ROUTER
+
+    PG -->|"Embeddings"| DRIFT
+    DRIFT -->|"Distribution<br/>changes"| EVALUATOR
+
+    PG -->|"Metrics"| DASHBOARD
+    QUEUE -->|"Queue health"| DASHBOARD
+    CONSENSUS -->|"Resolution rate"| DASHBOARD
+
+    S3 -->|"Retrieve assets"| API
+
+    style DS fill:#e1f5ff
+    style API fill:#fff3e0
+    style TEMPORAL fill:#f3e5f5
+    style AGREEMENT fill:#e8f5e9
+    style CONSENSUS fill:#e8f5e9
+    style GOLDEN fill:#e8f5e9
+    style ACTIVE fill:#fce4ec
+    style PG fill:#fafafa
+    style DASHBOARD fill:#f1f8e9
+```
+
+See [docs/architecture.mmd](./docs/architecture.mmd) for the full architecture diagram.
+
+## Annotation Workflow Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created: Task created
+
+    Created --> Assigned: Router assigns\nto annotators
+
+    Assigned --> Labeling: Annotators\nbegin work
+
+    Labeling --> LabelSubmitted: Annotation\nsubmitted
+
+    LabelSubmitted --> LabelValidated: Schema\nvalidation\npassed
+    LabelSubmitted --> LabelRejected: Validation\nerror
+    LabelRejected --> Labeling: Return for\ncorrection
+
+    LabelValidated --> OverlapCheck: Check if\nall annotators\ndone
+    OverlapCheck --> Review: All votes\nreceived
+    OverlapCheck --> AwaitingMore: Wait for\nmore annotators
+
+    AwaitingMore --> AwaitingMore: More\nannotations
+    AwaitingMore --> Review: Overlap\ncomplete
+
+    Review --> ComputeAgreement: Calculate\ninter-annotator\nagreement
+
+    ComputeAgreement --> ResolveConsensus: Weighted vote\nresolution
+
+    ResolveConsensus --> AutoResolved: Consensus\nreached
+    ResolveConsensus --> NeedsTiebreak: No consensus
+
+    AutoResolved --> QualityPass: Agreement\nabove threshold
+    AutoResolved --> QualityFail: Agreement\ntoo low
+    QualityFail --> Expert: Route to\nexpert queue
+
+    NeedsTiebreak --> Expert: Need expert\nadjudication
+
+    Expert --> ExpertReview: Expert reviews\nall votes
+
+    ExpertReview --> ExpertDecision: Expert\nresolves
+
+    ExpertDecision --> QualityPass: Expert\ndecision final
+
+    QualityPass --> Usable: Add to\ntraining data
+
+    Usable --> [*]: Complete
+
+    QualityFail --> Excluded: Remove from\ntraining data
+
+    Excluded --> [*]: Complete
+```
+
+See [docs/workflow_state_machine.mmd](./docs/workflow_state_machine.mmd) for details.
+
+## Quality & Feedback Loop
+
+```mermaid
+graph LR
+    subgraph "Model Training"
+        TRAIN["Model Training<br/>v1"]
+        EVAL["Model Evaluation<br/>on test set"]
+        TRAIN -->|"Evaluate"| EVAL
+    end
+
+    subgraph "Error Analysis"
+        PERF["Per-slice Analysis"]
+        ERRORS["Identify Failure<br/>Patterns"]
+        EVAL -->|"Analyze"| PERF
+        PERF -->|"Summarize"| ERRORS
+    end
+
+    subgraph "Targeted Re-Annotation"
+        REQUEST["Re-annotation Request<br/>500 low-light images<br/>200 abbreviations"]
+        ERRORS -->|"Generate request"| REQUEST
+    end
+
+    subgraph "Active Learning"
+        PREDICT["Model Predictions"]
+        UNCERTAINTY["Uncertainty Sampling"]
+        CURRICULUM["Curriculum Ranking"]
+        PREDICT -->|"Compute<br/>predictions"| UNCERTAINTY
+        UNCERTAINTY -->|"Rank by<br/>informativeness"| CURRICULUM
+    end
+
+    subgraph "Annotation Pipeline"
+        QUEUE["Priority Queue"]
+        ANNOTATE["Multi-stage<br/>Annotation"]
+        QUALITY["Quality Check"]
+        CONSENSUS["Consensus<br/>Resolution"]
+        CURRICULUM -->|"Ranked<br/>items"| QUEUE
+        REQUEST -->|"Add to<br/>queue"| QUEUE
+        QUEUE -->|"Assign"| ANNOTATE
+        ANNOTATE -->|"Measure<br/>quality"| QUALITY
+        QUALITY -->|"Resolve"| CONSENSUS
+    end
+
+    subgraph "Training Data"
+        TRAIN_DATA["Training Dataset<br/>v2<br/>10K examples"]
+        CONSENSUS -->|"Approved<br/>labels"| TRAIN_DATA
+    end
+
+    TRAIN_DATA -->|"Retrain"| TRAIN
+
+    style TRAIN fill:#e3f2fd
+    style EVAL fill:#e3f2fd
+    style ERRORS fill:#fce4ec
+    style UNCERTAINTY fill:#fff3e0
+    style CONSENSUS fill:#e8f5e9
+    style TRAIN_DATA fill:#c8e6c9
+```
+
+See [docs/quality_feedback_loop.mmd](./docs/quality_feedback_loop.mmd) for the complete feedback loop.
+
 ## Repository Structure
 
 ```
 ai-data-ops-platform/
 │
-├── README.md
+├── README.md                          # This file
+├── CONTRIBUTING.md                    # Developer guide and workflow
+├── DEMO.md                            # Complete walkthrough with code examples
+├── Dockerfile                         # Container image for FastAPI app
+├── docker-compose.yml                 # Local development infrastructure
+├── .env.example                       # Configuration template
+├── requirements.txt                   # Python dependencies
+├── Makefile                           # Development automation (make help)
 │
 ├── docs/
 │   ├── PRD.md                         # Product requirements document
@@ -180,28 +440,39 @@ ai-data-ops-platform/
 │   ├── DATA_MODEL.md                  # Database schema, annotation storage, audit trail
 │   ├── METRICS.md                     # Quality metrics, throughput, model impact measurement
 │   ├── DECISION_LOG.md                # Key product and technical decisions
-│   └── ROADMAP.md                     # Phased delivery plan
+│   ├── ROADMAP.md                     # Phased delivery plan
+│   ├── architecture.mmd               # System architecture diagram (Mermaid)
+│   ├── workflow_state_machine.mmd     # Annotation workflow lifecycle (Mermaid)
+│   └── quality_feedback_loop.mmd      # Model feedback loop (Mermaid)
 │
-└── src/
-    ├── task_engine/
-    │   ├── schema_registry.py         # Configurable annotation schema management
-    │   ├── task_router.py             # Skill-weighted task assignment with qualification gates
-    │   └── queue_manager.py           # Priority queue management and backlog optimization
-    │
-    ├── annotation/
-    │   ├── workflow_orchestrator.py    # Multi-stage annotation pipeline (label -> review -> adjudicate)
-    │   ├── consensus_resolver.py      # Majority vote, weighted vote, expert tiebreak
-    │   └── annotation_validator.py    # Schema validation, completeness checks, format enforcement
-    │
-    ├── quality/
-    │   ├── agreement_calculator.py    # Cohen's kappa, Krippendorff's alpha, IoU, BLEU
-    │   ├── annotator_scorer.py        # Per-annotator accuracy tracking and skill assessment
-    │   └── golden_set_evaluator.py    # Gold standard evaluation and calibration
-    │
-    └── feedback/
-        ├── active_learner.py          # Uncertainty sampling and curriculum construction
-        ├── drift_detector.py          # Production data distribution vs. training data comparison
-        └── model_evaluator.py         # Per-slice model performance and error analysis
+├── src/
+│   ├── task_engine/
+│   │   ├── schema_registry.py         # Configurable annotation schema management
+│   │   ├── task_router.py             # Skill-weighted task assignment with qualification gates
+│   │   └── queue_manager.py           # Priority queue management and backlog optimization
+│   │
+│   ├── annotation/
+│   │   ├── workflow_orchestrator.py    # Multi-stage annotation pipeline (label -> review -> adjudicate)
+│   │   ├── consensus_resolver.py      # Majority vote, weighted vote, expert tiebreak
+│   │   └── annotation_validator.py    # Schema validation, completeness checks, format enforcement
+│   │
+│   ├── quality/
+│   │   ├── agreement_calculator.py    # Cohen's kappa, Krippendorff's alpha, IoU, BLEU
+│   │   ├── annotator_scorer.py        # Per-annotator accuracy tracking and skill assessment
+│   │   └── golden_set_evaluator.py    # Gold standard evaluation and calibration
+│   │
+│   └── feedback/
+│       ├── active_learner.py          # Uncertainty sampling and curriculum construction
+│       ├── drift_detector.py          # Production data distribution vs. training data comparison
+│       └── model_evaluator.py         # Per-slice model performance and error analysis
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_agreement_calculator.py   # 40+ test cases covering all metrics
+│   └── test_consensus_resolver.py     # 30+ test cases covering all resolution strategies
+│
+└── demo/
+    └── run_demo.py                    # Runnable end-to-end pipeline demo
 ```
 
 ---
@@ -236,6 +507,135 @@ As PM, I wrote these to:
 3. **Prove skill-based routing matters** by analyzing annotator accuracy distributions and showing that routing radiology tasks to top-quartile annotators reduced error rates from 12% to 3.1% with only a 15% throughput decrease. The quality-throughput tradeoff analysis informed the routing algorithm weights.
 4. **Design the multi-stage workflow** by prototyping the orchestrator to explore how review stages interact with quality metrics. Discovered that a 20% spot-check review rate catches 94% of errors at 80% of the cost of full review, which became the default configuration for volume-oriented projects.
 5. **Demonstrate drift detection to stakeholders** by running the drift detector against production data samples to show how training data ages out of relevance. This convinced leadership to fund the continuous feedback loop rather than treating training data as a one-time cost.
+
+---
+
+---
+
+## Quick Start
+
+### For Exploring the Code
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the demo pipeline
+python demo/run_demo.py
+
+# Run tests
+pytest tests/ -v
+
+# See all development commands
+make help
+```
+
+### For Local Development
+
+```bash
+# Install and setup
+make setup
+
+# Start infrastructure (Postgres, Redis, Temporal)
+make docker-up
+
+# Run tests
+make test
+
+# Check code quality
+make lint
+
+# Auto-format code
+make format
+```
+
+### For Reading the Docs
+
+- **[DEMO.md](./DEMO.md)**: Complete walkthrough with code examples showing:
+  - Schema definition for fraud classification
+  - Task creation and annotation
+  - Agreement scoring with 7 metrics
+  - Consensus resolution (majority vs. weighted vote)
+  - Per-annotator accuracy tracking
+  - Quality report generation
+
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)**: Developer guide covering:
+  - Environment setup
+  - Adding new annotation types (worked example)
+  - Extending quality metrics
+  - Code style and testing
+  - Pull request process
+
+- **[docs/architecture.mmd](./docs/architecture.mmd)**: System architecture diagram
+- **[docs/workflow_state_machine.mmd](./docs/workflow_state_machine.mmd)**: Annotation lifecycle
+- **[docs/quality_feedback_loop.mmd](./docs/quality_feedback_loop.mmd)**: Model feedback integration
+
+---
+
+## Test Suite
+
+Comprehensive test coverage:
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=src --cov-report=html
+
+# Run specific test file
+pytest tests/test_agreement_calculator.py -v
+
+# Run tests in Docker
+docker-compose exec app pytest tests/ -v
+```
+
+**Test Coverage:**
+- **Agreement Calculator**: 40+ tests covering all 7 metrics (kappa, alpha, IoU, Dice, span F1, BLEU, semantic similarity)
+  - Perfect agreement scenarios
+  - Partial disagreement with various distributions
+  - Edge cases (empty data, mismatched lengths, skewed distributions)
+  - High-base-rate bias detection
+
+- **Consensus Resolver**: 30+ tests covering all resolution strategies
+  - Majority vote (2-of-3, 3-way splits)
+  - Weighted vote (DEC-004: accuracy-weighted advantage)
+  - Expert tiebreak (escalation routing)
+  - Single annotator (edge case)
+  - Batch resolution and distribution analysis
+
+---
+
+## Docker & Infrastructure
+
+The `docker-compose.yml` provides production-ready services:
+
+```bash
+# Start services
+docker-compose up -d
+
+# Services available at:
+# - API:       http://localhost:8000 (FastAPI with auto docs)
+# - Temporal:  http://localhost:8233 (Workflow orchestration)
+# - Postgres:  localhost:5432 (Annotation data)
+# - Redis:     localhost:6379 (Task queue)
+# - pgAdmin:   http://localhost:5050 (DB management, with --profile dev)
+# - Grafana:   http://localhost:3000 (Metrics dashboard, with --profile dev)
+
+# View logs
+docker-compose logs -f app
+
+# Run commands in container
+docker-compose exec app python demo/run_demo.py
+```
+
+Configuration via `.env` (see `.env.example`):
+- Database credentials and pool settings
+- Redis cache configuration
+- Temporal workflow settings
+- AWS S3 integration (optional)
+- Feature flags (active learning, drift detection, etc.)
+- Quality thresholds and consensus settings
 
 ---
 

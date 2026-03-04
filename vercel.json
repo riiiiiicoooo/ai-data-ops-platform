@@ -1,0 +1,125 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "public": false,
+  "framework": "nextjs",
+  "regions": ["sfo1"],
+  "env": {
+    "SUPABASE_URL": {
+      "description": "Supabase project URL",
+      "required": true
+    },
+    "SUPABASE_ANON_KEY": {
+      "description": "Supabase anonymous key for client-side queries",
+      "required": true
+    },
+    "SUPABASE_SERVICE_KEY": {
+      "description": "Supabase service key for admin operations (keep secret)",
+      "required": true
+    },
+    "NEXT_PUBLIC_SUPABASE_URL": {
+      "description": "Public Supabase URL for Next.js client",
+      "required": true
+    },
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": {
+      "description": "Public Supabase anon key for Next.js client",
+      "required": true
+    },
+    "UPSTASH_REDIS_URL": {
+      "description": "Upstash Redis connection URL",
+      "required": false
+    },
+    "UPSTASH_REDIS_TOKEN": {
+      "description": "Upstash Redis token",
+      "required": false
+    },
+    "RESEND_API_KEY": {
+      "description": "Resend API key for email sending",
+      "required": true
+    },
+    "TRIGGER_DEV_API_KEY": {
+      "description": "Trigger.dev API key for background jobs",
+      "required": true
+    },
+    "N8N_WEBHOOK_URL": {
+      "description": "n8n webhook URL for workflow triggers",
+      "required": false
+    },
+    "CLERK_PUBLISHABLE_KEY": {
+      "description": "Clerk public key for authentication",
+      "required": true
+    },
+    "CLERK_SECRET_KEY": {
+      "description": "Clerk secret key (keep secret)",
+      "required": true
+    },
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": {
+      "description": "Clerk public key for Next.js",
+      "required": true
+    },
+    "NEXT_PUBLIC_CLERK_SIGN_IN_URL": {
+      "description": "Clerk sign-in page URL",
+      "required": false
+    },
+    "NEXT_PUBLIC_CLERK_SIGN_UP_URL": {
+      "description": "Clerk sign-up page URL",
+      "required": false
+    },
+    "NEXT_PUBLIC_APP_URL": {
+      "description": "Your app's public URL",
+      "required": true
+    },
+    "NODE_ENV": {
+      "description": "Environment (production, staging, development)",
+      "required": false
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "api/webhooks/quality-batch.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "api/quality/score-batch.ts": {
+      "memory": 1024,
+      "maxDuration": 300
+    },
+    "api/active-learning/select.ts": {
+      "memory": 1024,
+      "maxDuration": 120
+    }
+  }
+}

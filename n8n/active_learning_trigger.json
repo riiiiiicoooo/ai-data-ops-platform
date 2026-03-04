@@ -1,0 +1,398 @@
+{
+  "name": "Active Learning Daily Trigger",
+  "nodes": [
+    {
+      "parameters": {
+        "trigger": "0 8 * * *",
+        "timezone": "UTC"
+      },
+      "id": "cron_daily_8am",
+      "name": "Cron - Daily at 8 AM UTC",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.supabase.io/rest/v1/rpc/get_uncertain_samples",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"p_limit\": 100,\n  \"p_entropy_threshold\": 0.5\n}"
+      },
+      "id": "supabase_query_uncertain_samples",
+      "name": "Query Uncertain Samples from Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "{{ $json.length }}",
+              "operation": "gt",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "if_samples_found",
+      "name": "Samples Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.example.com/active-learning/select-curriculum",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.TRIGGER_DEV_API_KEY }}"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"candidates\": {{ $json | stringify }},\n  \"budget\": 50,\n  \"strategy\": \"entropy_weighted_error\"\n}"
+      },
+      "id": "http_select_curriculum",
+      "name": "HTTP - Select Top Uncertain Samples",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.example.com/annotators/get-available",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.TRIGGER_DEV_API_KEY }}"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"skill_level\": [\"junior\", \"senior\"],\n  \"min_accuracy\": 0.75,\n  \"exclude_overloaded\": true\n}"
+      },
+      "id": "http_get_available_annotators",
+      "name": "HTTP - Get Available Annotators",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "loopOver": "{{ $json.selected_samples }}",
+        "dataPropertyNameInput": "sample"
+      },
+      "id": "loop_create_tasks",
+      "name": "Loop - Create Task for Each Sample",
+      "type": "n8n-nodes-base.loop",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.supabase.io/rest/v1/annotation_tasks",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"project_id\": \"{{ $json.sample.project_id }}\",\n  \"schema_id\": \"{{ $json.sample.schema_id }}\",\n  \"data_item_id\": \"{{ $json.sample.data_item_id }}\",\n  \"data\": {{ $json.sample.data | stringify }},\n  \"priority\": \"high\",\n  \"status\": \"created\",\n  \"batch_id\": \"active_learning_{{ now() }}\"\n}"
+      },
+      "id": "supabase_create_task",
+      "name": "Supabase - Create Annotation Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.supabase.io/rest/v1/annotation_tasks",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"id\": \"{{ $json.id }}\",\n  \"status\": \"assigned\",\n  \"assigned_to\": {{ $json.assigned_annotators | stringify }}\n}"
+      },
+      "id": "supabase_assign_annotators",
+      "name": "Supabase - Assign Annotators",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "resendApi",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"from\": \"assignments@aidata.example.com\",\n  \"to\": \"{{ $json.annotator.email }}\",\n  \"subject\": \"New Active Learning Tasks - {{ $json.assigned_annotators.length }} items\",\n  \"html\": \"<h1>You have new annotation tasks</h1><p>{{ $json.assigned_annotators.length }} uncertain samples from active learning</p><p>Priority: HIGH</p><p>These are high-value samples for model improvement.</p>\"\n}"
+      },
+      "id": "resend_assignment_email",
+      "name": "Send Assignment Notification Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1400,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "resendApi",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "bodyParametersJson": "{\n  \"from\": \"reports@aidata.example.com\",\n  \"to\": \"{{ $env.REPORT_EMAIL }}\",\n  \"subject\": \"Active Learning Summary - Daily Run\",\n  \"html\": \"<h1>Active Learning Daily Summary</h1><p>Uncertain Samples Found: {{ $json.length }}</p><p>Selected for Annotation: {{ $json.selected_samples | length }}</p><p>Annotators Assigned: {{ $json.annotators_assigned.length }}</p><p>Total Tasks Created: {{ $json.total_tasks_created }}</p>\"\n}"
+      },
+      "id": "resend_summary_report",
+      "name": "Send Summary Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1550,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#active-learning",
+        "text": "✓ Active Learning Run Complete\n• Samples Found: {{ $json.length }}\n• Tasks Created: {{ $json.total_tasks_created }}\n• Annotators Assigned: {{ $json.annotators_assigned.length }}\n• Budget Used: 50 samples",
+        "slackCredentialType": "predefinedCredentialType"
+      },
+      "id": "slack_summary",
+      "name": "Slack Summary Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        1550,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#alerts",
+        "text": "⏭️ Active Learning Skipped\nNo uncertain samples found with entropy > 0.5\nNext run: Tomorrow 8 AM UTC",
+        "slackCredentialType": "predefinedCredentialType"
+      },
+      "id": "slack_no_samples",
+      "name": "Slack - No Samples Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        850,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "cron_daily_8am": {
+      "main": [
+        [
+          {
+            "node": "supabase_query_uncertain_samples",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "supabase_query_uncertain_samples": {
+      "main": [
+        [
+          {
+            "node": "if_samples_found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if_samples_found": {
+      "main": [
+        [
+          {
+            "node": "http_select_curriculum",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "http_get_available_annotators",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "slack_no_samples",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http_select_curriculum": {
+      "main": [
+        [
+          {
+            "node": "loop_create_tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http_get_available_annotators": {
+      "main": [
+        [
+          {
+            "node": "loop_create_tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "loop_create_tasks": {
+      "main": [
+        [
+          {
+            "node": "supabase_create_task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "supabase_create_task": {
+      "main": [
+        [
+          {
+            "node": "supabase_assign_annotators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "supabase_assign_annotators": {
+      "main": [
+        [
+          {
+            "node": "resend_assignment_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "resend_assignment_email": {
+      "main": [
+        [
+          {
+            "node": "resend_summary_report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "slack_summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "active_learning_daily_trigger",
+  "tags": ["active-learning", "scheduled", "daily"]
+}
