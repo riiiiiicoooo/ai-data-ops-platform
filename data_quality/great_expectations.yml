@@ -1,0 +1,96 @@
+# Great Expectations Project Configuration
+# AI Data Ops Platform - Annotation and ML training data quality
+
+# Project-level settings
+config_version: 3.0
+
+# Datasource configuration
+datasources:
+  snowflake_datasource:
+    class_name: Datasource
+    execution_engine:
+      class_name: SqlAlchemyExecutionEngine
+      module_name: great_expectations.execution_engine
+      sqlalchemy_engine:
+        class_name: SqlAlchemyEngine
+        module_name: great_expectations.execution_engine
+        create_engine_kwargs:
+          url: "snowflake://${SNOWFLAKE_USER}:${SNOWFLAKE_PASSWORD}@${SNOWFLAKE_ACCOUNT}/AI_DATA_OPS_DB/PUBLIC?warehouse=${SNOWFLAKE_WAREHOUSE}"
+          echo: false
+          pool_size: 5
+          max_overflow: 10
+          pool_timeout: 30
+          pool_recycle: 3600
+
+    data_connectors:
+      # Connector for annotation tasks
+      annotation_tasks_connector:
+        class_name: SqlAlchemyDataConnector
+        module_name: great_expectations.datasource.data_connector.sqlalchemy_data_connector
+        include_schema_name: true
+        schemas:
+          - public
+        default_data_asset_name_suffix: .annotation_tasks
+
+      # Connector for ML training data
+      training_data_connector:
+        class_name: SqlAlchemyDataConnector
+        module_name: great_expectations.datasource.data_connector.sqlalchemy_data_connector
+        include_schema_name: true
+        schemas:
+          - public
+        default_data_asset_name_suffix: .training_data
+
+# Store configuration for expectations and validation results
+stores:
+  expectations_store:
+    class_name: ExpectationsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: expectations/
+
+  validations_store:
+    class_name: ValidationsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: uncommitted/validations/
+
+  checkpoint_store:
+    class_name: CheckpointStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: checkpoints/
+
+# Validation result storage (can also be sent to Snowflake, S3, etc)
+validation_operators:
+  action_list_operator:
+    class_name: ActionListValidationOperator
+    action_list:
+      - name: store_validation_result
+        action:
+          class_name: StoreValidationResultAction
+
+# Notification settings for failed validations
+# Can integrate with Slack, email, PagerDuty, etc
+notifier_config:
+  module_name: great_expectations.core.usage_statistics
+  action_list:
+    - name: send_slack_notification
+      action:
+        class_name: SlackNotificationAction
+        slack_webhook: ${SLACK_WEBHOOK_URL}
+        notify_on: all
+        renderer:
+          module_name: great_expectations.render.renderer.slack_renderer
+          class_name: SlackRenderer
+
+# Data context settings
+include_rendered_content:
+  global_descriptive_content:
+    - class_name: SiteBuilder
+
+# Checkpoint default settings
+checkpoint_default_actions:
+  - name: store_validation_result
+    action:
+      class_name: StoreValidationResultAction

@@ -1,0 +1,79 @@
+# Great Expectations Checkpoint Configuration
+# AI Data Ops Platform - Daily data quality validation
+
+name: daily_quality_check
+description: Daily validation of annotation and training data quality
+
+# Define the validation targets
+validations:
+  # Validate annotation task quality
+  - expectation_suite_name: annotation_quality_suite
+    data_assets:
+      - name: annotation_tasks
+        batch_request:
+          datasource_name: snowflake_datasource
+          data_connector_name: annotation_tasks_connector
+          data_asset_name: annotation_tasks
+    meta:
+      run_name: "daily_annotation_quality_check"
+      timestamp_column: created_at
+      lookback_window_days: 1
+
+  # Validate training data quality
+  - expectation_suite_name: model_training_data_suite
+    data_assets:
+      - name: training_data
+        batch_request:
+          datasource_name: snowflake_datasource
+          data_connector_name: training_data_connector
+          data_asset_name: training_data
+    meta:
+      run_name: "daily_training_data_check"
+      timestamp_column: created_date
+      lookback_window_days: 7
+
+# Actions to take on validation completion
+action_list:
+  # Store validation results in database
+  - name: store_validation_result
+    action:
+      class_name: StoreValidationResultAction
+
+  # Send Slack notification on failure
+  - name: send_slack_notification
+    action:
+      class_name: SlackNotificationAction
+      slack_webhook: ${SLACK_WEBHOOK_URL}
+      notify_on:
+        - failure
+        - success_with_warnings
+      include_config: true
+      include_result_statement: true
+      renderer:
+        module_name: great_expectations.render.renderer.slack_renderer
+        class_name: SlackRenderer
+
+  # Update data quality dashboard
+  - name: update_data_docs
+    action:
+      class_name: UpdateDataDocsAction
+      site_names:
+        - local_site
+
+# Scheduling configuration (for automated execution)
+schedule:
+  enabled: true
+  cron_expression: "0 2 * * *"  # 2 AM UTC daily
+  timezone: "UTC"
+
+# Checkpoint-level metadata
+meta:
+  version: "1.0"
+  owner: "AI Data Ops Team"
+  sla:
+    max_duration_minutes: 15
+    alert_on_timeout: true
+  documentation:
+    - "Validates annotation quality every morning before model training"
+    - "Checks training data integrity before daily model retraining"
+    - "Alerts Data Ops team on quality degradation"

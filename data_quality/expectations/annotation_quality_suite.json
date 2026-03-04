@@ -1,0 +1,177 @@
+{
+  "expectation_suite_name": "annotation_quality_suite",
+  "meta": {
+    "great_expectations_version": "0.17.0",
+    "description": "Data quality expectations for annotation task data. Ensures annotator submissions meet quality standards before ingestion into training pipelines.",
+    "data_asset_type": "Table",
+    "table_name": "annotation_tasks"
+  },
+  "expectations": [
+    {
+      "expectation_type": "expect_table_to_exist",
+      "kwargs": {
+        "table": "annotation_tasks"
+      },
+      "meta": {
+        "description": "Verify annotation_tasks table exists"
+      }
+    },
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {
+        "min_value": 100,
+        "max_value": 1000000
+      },
+      "meta": {
+        "description": "Ensure table has reasonable row count (not empty, not exploding)",
+        "alert_threshold_min": "Alert if < 100 rows (data pipeline issue)",
+        "alert_threshold_max": "Alert if > 1M rows (uncontrolled growth)"
+      }
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_set",
+      "kwargs": {
+        "column_set": [
+          "task_id",
+          "annotator_id",
+          "annotation_value",
+          "confidence_score",
+          "annotation_status",
+          "agreement_score",
+          "created_at",
+          "completed_at",
+          "metadata_json"
+        ]
+      },
+      "meta": {
+        "description": "Verify required columns are present in expected schema"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "task_id"
+      },
+      "meta": {
+        "description": "task_id is the primary identifier - must never be null",
+        "severity": "critical"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "annotator_id"
+      },
+      "meta": {
+        "description": "annotator_id links to team member - required for audit/accountability",
+        "severity": "critical"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "annotation_value"
+      },
+      "meta": {
+        "description": "annotation_value is the labeled output - must always have a value",
+        "severity": "critical"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "confidence_score",
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "result_format": "SUMMARY"
+      },
+      "meta": {
+        "description": "confidence_score should be normalized between 0 and 1 (0%=no confidence, 1=100% confident)",
+        "severity": "high",
+        "alert_on": "< 0 or > 1 (invalid range)"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "annotation_status",
+        "value_set": [
+          "pending",
+          "completed",
+          "reviewed",
+          "rejected",
+          "archived"
+        ]
+      },
+      "meta": {
+        "description": "annotation_status must be one of the predefined workflow states",
+        "severity": "high"
+      }
+    },
+    {
+      "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
+      "kwargs": {
+        "column_A": "completed_at",
+        "column_B": "created_at"
+      },
+      "meta": {
+        "description": "completed_at must be after created_at (logical time ordering)",
+        "severity": "critical",
+        "alert_on": "Inverted timestamps indicate data corruption"
+      }
+    },
+    {
+      "expectation_type": "expect_column_mean_to_be_between",
+      "kwargs": {
+        "column": "agreement_score",
+        "min_value": 0.6,
+        "max_value": 1.0
+      },
+      "meta": {
+        "description": "Mean inter-annotator agreement should be 60%+. Below indicates inconsistent task or poor instructions.",
+        "severity": "medium",
+        "action_on_fail": "Review task description and annotator training"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "task_id",
+        "regex": "^TASK-[0-9]{6}$"
+      },
+      "meta": {
+        "description": "task_id should follow format TASK-XXXXXX (6 digits) for consistency with data gen",
+        "severity": "medium"
+      }
+    },
+    {
+      "expectation_type": "expect_column_distinct_values_to_be_in_set",
+      "kwargs": {
+        "column": "annotation_status",
+        "value_set": [
+          "pending",
+          "completed",
+          "reviewed",
+          "rejected"
+        ],
+        "result_format": "SUMMARY"
+      },
+      "meta": {
+        "description": "Verify no unexpected status values exist",
+        "severity": "medium"
+      }
+    },
+    {
+      "expectation_type": "expect_column_proportion_of_unique_values_to_be_between",
+      "kwargs": {
+        "column": "annotator_id",
+        "min_value": 0.01,
+        "max_value": 0.5
+      },
+      "meta": {
+        "description": "Annotator IDs should repeat across tasks (1-50% unique). 100% unique = likely synthetic data.",
+        "severity": "low"
+      }
+    }
+  ]
+}

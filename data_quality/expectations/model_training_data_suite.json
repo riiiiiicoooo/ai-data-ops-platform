@@ -1,0 +1,196 @@
+{
+  "expectation_suite_name": "model_training_data_suite",
+  "meta": {
+    "great_expectations_version": "0.17.0",
+    "description": "Data quality expectations for ML model training datasets. Ensures training data maintains required statistical properties and schema integrity before model training.",
+    "data_asset_type": "Table",
+    "table_name": "training_data"
+  },
+  "expectations": [
+    {
+      "expectation_type": "expect_table_to_exist",
+      "kwargs": {
+        "table": "training_data"
+      }
+    },
+    {
+      "expectation_type": "expect_table_column_count_to_be_between",
+      "kwargs": {
+        "min_value": 10,
+        "max_value": 200
+      },
+      "meta": {
+        "description": "Training data should have reasonable feature count",
+        "alert_on_min": "Too few features may indicate data pipeline error",
+        "alert_on_max": "Too many features may indicate data explosion or feature drift"
+      }
+    },
+    {
+      "expectation_type": "expect_table_columns_to_match_set",
+      "kwargs": {
+        "column_set": [
+          "sample_id",
+          "feature_vector",
+          "label",
+          "split",
+          "data_quality_score",
+          "created_date"
+        ]
+      },
+      "meta": {
+        "description": "Verify required schema columns are present",
+        "severity": "critical"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "sample_id"
+      },
+      "meta": {
+        "description": "sample_id uniquely identifies training examples",
+        "severity": "critical"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "label"
+      },
+      "meta": {
+        "description": "label (target variable) must have no nulls for supervised training",
+        "severity": "critical"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "feature_vector"
+      },
+      "meta": {
+        "description": "Feature vectors must be complete (no nulls)",
+        "severity": "critical"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {
+        "column": "sample_id"
+      },
+      "meta": {
+        "description": "Each sample_id should appear exactly once (no duplicates)",
+        "severity": "critical",
+        "alert_on": "Duplicate samples bias model training"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "split",
+        "value_set": [
+          "train",
+          "validation",
+          "test",
+          "holdout"
+        ]
+      },
+      "meta": {
+        "description": "split indicates which partition the sample belongs to",
+        "severity": "high"
+      }
+    },
+    {
+      "expectation_type": "expect_column_proportion_of_unique_values_to_be_between",
+      "kwargs": {
+        "column": "label",
+        "min_value": 0.01,
+        "max_value": 0.5
+      },
+      "meta": {
+        "description": "For classification tasks, class balance check. Labels should repeat across samples (not all unique).",
+        "severity": "medium",
+        "alert_on_min": "Potential class imbalance - may need resampling",
+        "alert_on_max": "Too many unique labels for classification task"
+      }
+    },
+    {
+      "expectation_type": "expect_column_distinct_values_to_be_in_set",
+      "kwargs": {
+        "column": "label",
+        "value_set": [
+          0,
+          1,
+          "positive",
+          "negative",
+          "class_a",
+          "class_b",
+          "class_c"
+        ]
+      },
+      "meta": {
+        "description": "Label values should match expected classification categories",
+        "severity": "high"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "data_quality_score",
+        "min_value": 0.0,
+        "max_value": 1.0
+      },
+      "meta": {
+        "description": "Quality score should be normalized 0-1",
+        "severity": "medium"
+      }
+    },
+    {
+      "expectation_type": "expect_column_mean_to_be_between",
+      "kwargs": {
+        "column": "data_quality_score",
+        "min_value": 0.7,
+        "max_value": 1.0
+      },
+      "meta": {
+        "description": "Average data quality should be >= 70%. Below indicates systemic quality issues.",
+        "severity": "high",
+        "action_on_fail": "Investigate data pipeline for quality degradation"
+      }
+    },
+    {
+      "expectation_type": "expect_select_column_values_to_be_unique_within_record",
+      "kwargs": {
+        "column_list": [
+          "sample_id"
+        ]
+      },
+      "meta": {
+        "description": "Composite uniqueness check (especially important for multi-key datasets)",
+        "severity": "critical"
+      }
+    },
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {
+        "min_value": 1000,
+        "max_value": 100000000
+      },
+      "meta": {
+        "description": "Training dataset size validation. Too small = insufficient training data, too large = may be uncontrolled growth.",
+        "severity": "medium",
+        "alert_threshold_min": "< 1000 rows indicates insufficient training data"
+      }
+    },
+    {
+      "expectation_type": "expect_column_pair_values_a_to_be_greater_than_b",
+      "kwargs": {
+        "column_A": "created_date",
+        "column_B": "created_date"
+      },
+      "meta": {
+        "description": "Temporal ordering validation (all training samples should be from recent window)",
+        "severity": "low"
+      }
+    }
+  ]
+}
