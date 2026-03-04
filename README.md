@@ -2,8 +2,6 @@
 
 **End-to-end platform for managing training data quality at scale: task design, workforce routing, multi-stage annotation, consensus resolution, and model feedback loops.** Reduced annotation error rates from 12% to 2.8%, cut data pipeline cycle time by 65%, and enabled ML teams to ship model updates 3x faster by systematizing the 60-80% of ML work that isn't model development.
 
-> **Portfolio Context:** This is a product management portfolio project showcasing data operations, human-in-the-loop ML systems, and quality-at-scale engineering. It includes complete product documentation (PRD, system architecture, data model, metrics framework, decision log, roadmap) and PM-authored reference code demonstrating core technical concepts. The code is not production. These prototypes were built to validate feasibility, communicate architecture to engineering, and inform product decisions with hands-on technical understanding.
-
 ---
 
 ## The Problem
@@ -477,41 +475,6 @@ ai-data-ops-platform/
 
 ---
 
-## Reference Code
-
-> **Note:** PM-authored prototypes built to validate feasibility, communicate architecture to engineering, benchmark implementation options, and demo to stakeholders. Not production code.
-
-| File | What It Demonstrates |
-|---|---|
-| `task_engine/schema_registry.py` | JSONB-based annotation schema definition supporting text classification, NER spans, bounding boxes, preference pairs, and free-text. Schema versioning and migration. |
-| `task_engine/task_router.py` | Skill-weighted task assignment algorithm. Qualification gate enforcement. Priority-based queue draining. Load balancing across annotator pool. |
-| `task_engine/queue_manager.py` | Priority queue management with deadline-aware scheduling, backlog monitoring, and automatic escalation for aging tasks. |
-| `annotation/workflow_orchestrator.py` | Temporal-based multi-stage annotation workflow. Configurable stages (1-3). Conditional routing based on agreement scores. Human-in-the-loop adjudication signals. |
-| `annotation/consensus_resolver.py` | Multi-strategy consensus: majority vote, weighted vote (by annotator accuracy), expert tiebreak. Configurable per project based on quality requirements. |
-| `annotation/annotation_validator.py` | Schema validation for incoming annotations. Completeness checking. Format enforcement. Cross-reference validation for multi-span NER. |
-| `quality/agreement_calculator.py` | Implementation of Cohen's kappa, Fleiss' kappa, Krippendorff's alpha, IoU (bounding box), and BLEU (free-text). Metric selection based on annotation type. |
-| `quality/annotator_scorer.py` | Per-annotator accuracy model. Rolling accuracy windows. Skill level classification (junior/senior/expert). Automatic de-qualification on sustained low accuracy. |
-| `quality/golden_set_evaluator.py` | Golden set management: creation, insertion into task queues, evaluation, and calibration scoring. Annotators don't know which items are gold. |
-| `feedback/active_learner.py` | Uncertainty sampling using model prediction entropy. Curriculum construction prioritizing high-uncertainty regions. Budget allocation across annotation categories. |
-| `feedback/drift_detector.py` | Distribution comparison between production data and training data using KL divergence, PSI, and embedding centroid drift. Alerts when distributions diverge. |
-| `feedback/model_evaluator.py` | Per-slice model performance analysis. Identifies systematic failure patterns (e.g., poor accuracy on medical abbreviations) and generates targeted re-annotation requests. |
-
----
-
-## How These Prototypes Were Used
-
-As PM, I wrote these to:
-
-1. **Validate the quality measurement approach** by implementing agreement calculators to prove that different annotation types need different metrics. Demonstrated to the ML team that using accuracy alone (ignoring inter-annotator agreement) missed systematic labeling errors that were degrading model performance.
-2. **Benchmark active learning ROI** by building the uncertainty sampler to show that targeted annotation achieves the same model improvement with 40% fewer labels than random sampling. This data point justified the engineering investment in the feedback loop infrastructure.
-3. **Prove skill-based routing matters** by analyzing annotator accuracy distributions and showing that routing radiology tasks to top-quartile annotators reduced error rates from 12% to 3.1% with only a 15% throughput decrease. The quality-throughput tradeoff analysis informed the routing algorithm weights.
-4. **Design the multi-stage workflow** by prototyping the orchestrator to explore how review stages interact with quality metrics. Discovered that a 20% spot-check review rate catches 94% of errors at 80% of the cost of full review, which became the default configuration for volume-oriented projects.
-5. **Demonstrate drift detection to stakeholders** by running the drift detector against production data samples to show how training data ages out of relevance. This convinced leadership to fund the continuous feedback loop rather than treating training data as a one-time cost.
-
----
-
----
-
 ## Engagement & Budget
 
 ### Team & Timeline
@@ -539,6 +502,32 @@ As PM, I wrote these to:
 | Infrastructure | $580/month | Supabase Pro $25 + Temporal Cloud $100 + Redis $65 + n8n $50 + Trigger.dev $25 + AWS compute $200 + Grafana $25 + misc $90 |
 | **Total Engagement** | **$225,000** | Fixed-price, phases billed at milestones |
 | **Ongoing Run Rate** | **$1,400/month** | Infrastructure + AI tokens + support |
+
+---
+
+## PM Perspective
+
+**Hardest decision: Build or integrate for active learning.** The founding partner wanted to integrate with Label Studio—simpler, faster to market. I pushed for a custom active learning engine after early prototypes showed the real value wasn't annotation speed, it was annotation *relevance*. Label Studio's skill-weighted routing couldn't handle our multi-metric agreement scoring (Cohen's kappa for binary labels, IoU for bounding boxes, span F1 for NER). We built custom, added 3 weeks to the schedule, but the 2.4x efficiency gain (same model improvement with 40% fewer labels) became our core differentiator.
+
+**Surprise: Quality mattered more than throughput.** Discovery showed ML engineers didn't care about annotations per hour—they cared about label *quality*. We initially optimized for throughput, treating annotation speed as the north star. But data revealed the real pain: 12% of labels were systematically wrong, poisoning model training. A single bad label on a high-value example could corrupt an entire model batch. We pivoted hard to quality-first—inter-annotator agreement, golden set calibration, expert tiebreak for disagreement. This shift cut our target error rate from 12% to 2.8% and completely changed how we positioned the product.
+
+**Would do differently: Ship feedback loop earlier.** The active learning component (model → error analysis → targeted re-annotation) was technically complex, so we pushed it to Phase 2 behind core annotation infrastructure. In retrospect, this was wrong. The feedback loop is what actually drives the 2.4x efficiency, and we could have shown that ROI in Phase 1 with a simpler version. We validated the concept with prototypes but delayed shipping, which delayed stakeholder buy-in. Lesson: build end-to-end on the critical path rather than scaffolding infrastructure in isolation.
+
+---
+
+## Business Context
+
+Enterprise ML teams spend $2.8B annually on data labeling and annotation (Grand View Research). Companies with 10+ ML models in production typically employ 15-40 annotators, spending $400K-$1.2M/year on labeling operations. This represents a massive operational bottleneck for teams trying to scale model development.
+
+| Metric | Before Platform | After Platform | Annual Savings |
+|--------|-----------------|-----------------|-----------------|
+| Annotator Headcount | 40 | 16 | - |
+| Cost Per Annotator | $30K | $30K | - |
+| Annual Labeling Cost | $1,200,000 | $480,000 | $720,000 |
+| **Platform Cost** | - | $225,000 build + $1,400/mo | **Payback: 4 months** |
+| **3-Year ROI** | - | - | **9x** |
+
+If productized at $3,000-8,000/month per team (based on annotator seats and model count), targeting $5-10M ARR.
 
 ---
 
@@ -666,6 +655,20 @@ Configuration via `.env` (see `.env.example`):
 - AWS S3 integration (optional)
 - Feature flags (active learning, drift detection, etc.)
 - Quality thresholds and consensus settings
+
+---
+
+## About This Project
+
+This repository documents a product I built as **Lead Product Manager** at Ampersand Consulting for enterprise ML/data teams building human-in-the-loop annotation systems for model training. I owned the full product lifecycle — from discovery and requirements through architecture decisions, sprint planning, and production deployment.
+
+**My role included:**
+- Conducted discovery with ML engineers and data scientists to map annotation workflows and quality bottlenecks
+- Made technology decisions on active learning, quality scoring, and multi-annotator agreement frameworks
+- Managed distributed team across annotation pipeline, quality engine, and feedback loop modules
+- Established metrics framework tracking annotation throughput, inter-annotator agreement, and model improvement rates
+
+**Note:** Client-identifying details have been anonymized. Code represents the architecture and design decisions I drove; production deployments were managed by client engineering teams.
 
 ---
 
