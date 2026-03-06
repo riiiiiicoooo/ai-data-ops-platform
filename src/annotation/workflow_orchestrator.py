@@ -18,6 +18,24 @@ conditional routing logic to show stakeholders that 60-70% of items
 would auto-accept at the agreement check, preserving expert capacity
 for genuinely ambiguous cases. That analysis justified the Temporal
 infrastructure investment over the simpler Celery approach.
+
+Production Notes (not implemented in this demo):
+- Persistent Storage: The in-memory workflow state should be backed by
+  Supabase/Postgres with JSONB columns for task metadata. Temporal's native
+  persistence layer handles workflow state, but task data needs durable storage.
+- Webhook Signature Verification: Inbound webhooks from annotation tools
+  (Label Studio, Labelbox) should verify HMAC signatures before processing.
+  Unsigned payloads must be rejected to prevent workflow manipulation.
+- Async Task Processing: Long-running annotation consensus calculations should
+  use Temporal activities with heartbeat timeouts, not synchronous calls. This
+  prevents workflow worker starvation under high annotation volume.
+- PII in Annotation Data: If annotating datasets containing user content (e.g.,
+  chat transcripts for RLHF), the annotation UI should display PII-redacted
+  versions. Use Presidio or AWS Comprehend for automatic PII detection before
+  routing to human annotators.
+- Model Feedback Loop: Annotation quality metrics (inter-annotator agreement,
+  adjudication rates) should feed back into model retraining pipelines via
+  a feature store — not just stored as static reports.
 """
 
 import time
