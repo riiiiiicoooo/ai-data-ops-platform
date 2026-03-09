@@ -177,6 +177,54 @@ This document captures key product and technical decisions, what alternatives we
 
 ---
 
+## DEC-012: Pivot From Custom Experimentation Framework to PostHog Feature Flags
+
+**Date:** September 2024
+**Status:** Accepted (supersedes earlier approach)
+**Decider:** PM + Engineering Lead
+
+**Context:**
+
+V1 of the platform included a custom A/B testing framework for measuring annotator quality. The system could run experiments to test whether a new UI change (e.g., golden item highlighting) improved annotator accuracy. The framework was built in-house over 6 weeks and included: experiment assignment, metric collection, statistical analysis, and reporting dashboards.
+
+For three months, the team used the custom framework to test hypotheses: "Does UI highlighting improve accuracy?" (yes, +3%), "Does annotator training reduce error rate?" (yes, +4%). The experiments generated insights but consumed significant engineering effort to maintain.
+
+**What Happened:**
+
+By month 4, the team discovered that PostHog (already integrated for product analytics) had a powerful feature flag and A/B testing system that was nearly identical to what we'd built. More importantly, PostHog's system was:
+- Deployed and maintained by PostHog (not us)
+- Already integrated with our event tracking
+- Capable of all the statistical analyses we'd built
+- Battle-tested across 1,000+ companies
+
+The realization: we spent 6 weeks rebuilding PostHog's product.
+
+**Decision:**
+
+Migrated all experiment infrastructure to PostHog. Disabled custom framework. Consolidated all A/B testing under PostHog feature flags.
+
+**Rationale:**
+
+1. **Maintenance burden eliminated:** PostHog handles updates, bug fixes, and scalability. Our custom framework required ongoing fixes (edge cases in statistical calculation, UI bugs in reporting dashboard).
+
+2. **Feature completeness:** PostHog's A/B testing includes advanced features we hadn't implemented: multivariate testing, sequential testing, correlation analysis with other events. We immediately started using these.
+
+3. **Integration leverage:** PostHog was already tracking annotator events (session start, annotation submitted, correction made). Feature flags within PostHog can automatically analyze impact on these events without additional ETL.
+
+4. **6 weeks of engineering freed:** The team that built the custom framework could focus on the novel part of the platform — the multi-metric agreement engine (the actual product value).
+
+**Consequences:**
+
+- **Short-term:** Migrating 12 active experiments from custom framework to PostHog took 2 days. Dashboard retraining took 1 day.
+- **Long-term:** Saved 6 weeks of maintenance per year (estimated). PostHog's simpler mental model (flags = assignment, variants = treatment groups) reduced cognitive overhead.
+- **Cost:** PostHog charge scales with event volume; at 500K events/month cost is ~$200/month. Offset by engineering time savings.
+
+**Lesson:**
+
+Before building platform infrastructure, check if an existing product already solved the problem 95% of the way there. Especially true for cross-cutting concerns like experimentation that aren't core to the product.
+
+---
+
 ## DEC-008: Per-Domain Qualification Gates vs. Universal Onboarding
 
 **Date:** April 2024
