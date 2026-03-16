@@ -30,6 +30,13 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
 
+# Import persistence layer (optional - allows graceful degradation if DB unavailable)
+try:
+    from ..db import save_task_assignment, save_annotator_profile, get_annotator_profile
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
+
 
 class TaskPriority(Enum):
     """Task priority levels. Higher value = more urgent."""
@@ -162,8 +169,30 @@ class TaskRouter:
     # ------------------------------------------------------------------
 
     def register_annotator(self, profile: AnnotatorProfile) -> None:
-        """Register or update an annotator profile."""
+        """
+        Register or update an annotator profile.
+
+        Updates both in-memory state and persistent database.
+        Database is source of truth for annotator state across sessions.
+        """
         self.annotators[profile.annotator_id] = profile
+
+        # Persist to database for session continuity
+        if DB_AVAILABLE:
+            try:
+                save_annotator_profile(
+                    annotator_id=profile.annotator_id,
+                    status=profile.status,
+                    skill_level=profile.skill_level.value,
+                    qualifications=profile.qualifications,
+                    accuracy_by_type=profile.accuracy_by_type,
+                    active_tasks=profile.active_tasks,
+                    max_concurrent=profile.max_concurrent,
+                )
+            except Exception as e:
+                # Log but don't fail: in-memory state is still usable
+                import logging
+                logging.warning(f"Failed to persist annotator profile {profile.annotator_id}: {e}")
 
     def update_accuracy(
         self,
@@ -254,6 +283,28 @@ class TaskRouter:
             score_breakdown=self._compute_breakdown(best_task, profile),
             assigned_at=now,
         )
+
+        # Persist assignment to database for audit trail and reproducibility
+        if DB_AVAILABLE:
+            try:
+                save_task_assignment(
+                    assignment_id=str(uuid4()),
+                    task_id=best_task.task_id,
+                    annotator_id=annotator_id,
+                    assignment_score=score,
+                    score_breakdown=assignment.score_breakdown,
+                    annotator_skill_level=profile.skill_level.value,
+                    annotator_active_tasks=profile.active_tasks,
+                    annotator_accuracy=(
+                        profile.accuracy_by_type.get(best_task.task_type, 0.5)
+                        if profile.accuracy_by_type
+                        else 0.5
+                    ),
+                )
+            except Exception as e:
+                # Log but don't fail: in-memory assignment still created
+                import logging
+                logging.warning(f"Failed to persist task assignment: {e}")
 
         # Update state
         best_task.status = "assigned"
