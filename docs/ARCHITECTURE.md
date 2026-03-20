@@ -743,3 +743,315 @@ Business Health (Grafana dashboards):
 | Staging | ~$2,500 | Production-like but smaller scale |
 | Production (200 concurrent annotators) | ~$6,500 | Full HA, monitoring, backups |
 | Production (1,000 concurrent annotators) | ~$18,000 | Scaled API and worker pools, larger database |
+
+---
+
+## Cost Architecture & Efficiency Analytics
+
+**Principle:** Cost-per-label is the north star metric. Optimize workflow design to minimize cost without sacrificing quality.
+
+In data labeling, cost variance is enormous. A single image labeled by one annotator might cost $0.05. The same image labeled by consensus workflow with expert review might cost $2.50. This section explains how the platform quantifies these costs and recommends optimal configurations.
+
+### Cost-Per-Label Framework
+
+Cost per label is the fundamental unit of economics in annotation operations.
+
+```
+Cost-per-label = Total Project Cost / Total Labels Produced
+
+Example: Image Classification Project
+├─ 3 annotators × 40 hours × $40/hour average = $4,800 labor
+├─ 10% golden set review (5,000 items) = $500
+├─ Infrastructure (platform, storage) = $500
+├─ Total: $5,800
+├─ Total labels: 50,000 images
+└─ Cost per label: $5,800 / 50,000 = $0.116
+```
+
+Track this metric monthly to see if optimizations are working:
+
+```
+Month 1: $0.15 per label (baseline, single-pass workflow)
+Month 2: $0.14 per label (after enabling active learning)
+Month 3: $0.11 per label (after reducing golden set rate for senior annotators)
+```
+
+The platform's analytics dashboard shows cost-per-label broken down by:
+- **Per project:** Which projects are most cost-efficient?
+- **Per annotator tier:** Are senior annotators truly more cost-effective?
+- **Per workflow type:** Single-pass vs. consensus costs?
+- **Per phase:** Early-stage (higher cost per label) vs. mature (lower cost)?
+
+### Active Learning ROI: 2.4x Efficiency Gain
+
+Active learning saves money by reducing the total number of labels needed to achieve target model quality.
+
+**Without Active Learning (Naive Approach):**
+```
+Need to achieve: 95% model accuracy on new task
+Label randomly: 10,000 images
+Cost: 10,000 × $0.10 = $1,000
+Training data quality: Random sample (covers all subpopulations)
+```
+
+**With Active Learning (Smart Approach):**
+```
+Strategy: Train on seed set, use model to score unlabeled data
+Step 1: Label 500 images (seed set)
+        Cost: 500 × $0.10 = $50
+        Train model on 500 examples
+
+Step 2: Run model on remaining 9,500 images
+        Model assigns confidence score to each
+
+Step 3: Identify uncertain predictions (confidence 0.4-0.6)
+        ~4,000 of 9,500 are uncertain
+
+Step 4: Label only the uncertain 4,000
+        Cost: 4,000 × $0.10 = $400
+
+Step 5: Train final model on 4,500 total examples
+
+Total cost: $50 + $400 = $450
+Total labels: 4,500
+Cost per label: $450 / 4,500 = $0.10 (same cost per label)
+BUT: Only needed 4,500 labels instead of 10,000
+Savings: 55% reduction in volume
+Efficiency ratio: 10,000 / 4,500 = 2.22x
+```
+
+**Real-world measurement** (from active learning analytics):
+```
+Project: Medical image classification
+Without AL: 10,000 labels to reach 94% accuracy
+With AL: 4,100 labels to reach 94% accuracy
+Savings: 5,900 labels × $0.15 per label = $885 saved
+Cost reduction: 44% fewer labels annotated
+Efficiency ratio: 2.44x (2.4x typical in literature)
+```
+
+**The key insight:** Active learning doesn't reduce cost-per-annotated-label. It reduces total labels needed. The savings materialize across the entire project lifecycle.
+
+### Consensus Cost Optimization
+
+Consensus workflows (multi-annotator review, adjudication) improve label quality but add cost. The platform helps teams find the optimal balance.
+
+**Cost Profiles by Workflow:**
+
+| Workflow | Cost Multiplier | Quality | Use Case |
+|----------|---|---|---|
+| Single-pass (1 annotator) | 1.0x | ~85% | Low-stakes classification, high-confidence taxonomy |
+| 2-stage (1 annotator + 10% review by second) | 1.15x | ~91% | Standard ML training data, informational labeling |
+| 2-stage (1 annotator + 20% review) | 1.30x | ~93% | Medical/financial data, higher quality bar |
+| 3-stage (consensus + expert adjudication on disagreements) | 2.50x | ~96% | Clinical trials, legal documents, safety-critical data |
+
+**Example Comparison (10,000 items):**
+
+```
+Single-pass:
+├─ Annotate 10,000 items: 10,000 × $0.10 = $1,000
+├─ Golden set review (5%): 500 × $0.10 = $50
+└─ Total: $1,050 (cost per label: $0.105)
+
+2-stage (10% overlap):
+├─ Annotate 10,000 items: 10,000 × $0.10 = $1,000
+├─ Review 10% (1,000): 1,000 × $0.10 = $100
+├─ Disagreement resolution (25% × 2x): 250 × $0.20 = $50
+├─ Golden set: 500 × $0.10 = $50
+└─ Total: $1,200 (cost per label: $0.120) [+14% cost, +6% quality]
+
+3-stage (50% overlap + expert):
+├─ Annotate 10,000 items: 10,000 × $0.10 = $1,000
+├─ First review (50%): 5,000 × $0.10 = $500
+├─ Disagreement resolution (30%): 1,500 × $0.20 = $300
+├─ Expert adjudication: 2,000 × $0.30 = $600
+├─ Golden set: 500 × $0.10 = $50
+└─ Total: $2,450 (cost per label: $0.245) [+133% cost, +11% quality]
+```
+
+**Recommendation framework:**
+- **Data low-stakes:** Single-pass (cost-optimized)
+- **Standard ML training:** 2-stage with 10-15% review (balanced)
+- **High-quality ML (healthcare, finance):** 2-stage with 20% review or 3-stage
+- **Safety-critical (autonomous vehicles, clinical trials):** Full 3-stage consensus
+
+### Golden Set Sizing Optimization
+
+Golden sets are expensive: pre-labeled items used to measure annotator accuracy. But they have diminishing returns.
+
+**Challenge:** High-accuracy annotators (95%+) are monitored the same way as junior annotators (85%). This wastes cost.
+
+**Solution:** Risk-based golden set rates.
+
+```
+Junior annotator (85% baseline accuracy):
+├─ To detect 5% accuracy drop with 95% confidence: need ~300 samples
+├─ On 50,000 work/year: 300 / 50,000 = 0.6% golden set
+├─ Current practice: 10% = overkill by 17x
+├─ Current cost: 5,000 × $0.10 = $500/year
+├─ Optimized cost: 300 × $0.10 = $30/year
+└─ Savings: $470/year per junior annotator
+
+Mid-level annotator (92% accuracy):
+├─ To detect 3% accuracy drop with 95% confidence: need ~200 samples
+├─ On 50,000 work/year: 0.4% golden set
+├─ Optimized from 10% → 1%
+├─ Current: $500/year → Optimized: $50/year
+└─ Savings: $450/year
+
+Senior annotator (96% accuracy):
+├─ To detect 2% accuracy drop: need ~100 samples
+├─ On 50,000 work/year: 0.2% golden set
+├─ Optimized from 10% → 0.3%
+├─ Current: $500/year → Optimized: $15/year
+└─ Savings: $485/year
+```
+
+**Team-wide impact:**
+```
+Team of 20 annotators (5 junior, 8 mid, 7 senior)
+Current golden set cost: 20 × $500 = $10,000/year
+Optimized cost: (5 × $470) + (8 × $450) + (7 × $485) = $2,350 + $3,600 + $3,395 = $9,345
+Savings: $655/year
+```
+
+Savings are modest per annotator but significant at scale. More importantly, this removes *cognitive overhead*: senior annotators no longer feel over-supervised.
+
+### Throughput-Cost Frontier Analysis
+
+For a given quality bar, multiple workflow configurations exist. Which is cheapest?
+
+**Example: Document Classification (3 classes)**
+
+```
+Configuration 1: Single-pass
+├─ 1 annotator per item
+├─ Golden set: 5%
+├─ Cost per label: $0.08
+├─ Expected quality: 85%
+├─ Team capacity: 200 labels/day
+
+Configuration 2: 2-stage (10% review)
+├─ 1 annotator + 10% review + 25% disagreement adjudication
+├─ Golden set: 5%
+├─ Cost per label: $0.10
+├─ Expected quality: 91%
+├─ Team capacity: 180 labels/day (slower due to review)
+
+Configuration 3: 2-stage (20% review)
+├─ 1 annotator + 20% review + 30% disagreement adjudication
+├─ Golden set: 3% (optimized for senior annotators)
+├─ Cost per label: $0.11
+├─ Expected quality: 94%
+├─ Team capacity: 150 labels/day
+
+Configuration 4: Model-assisted + 1-stage review
+├─ Pre-label with model, annotators review+correct
+├─ Golden set: 5%
+├─ Cost per label: $0.06 (less work due to pre-labels)
+├─ Expected quality: 93%
+├─ Team capacity: 250 labels/day
+└─ Caveat: Requires trained model upfront
+```
+
+**Decision:** If quality target is 92%+ and budget is tight, Config 4 (model-assisted) is optimal: lowest cost AND highest throughput. If model isn't available, Config 2 is the efficiency frontier.
+
+Dashboard surfaces this visually:
+```
+Quality vs. Cost Trade-off Curve
+     95% │         ╭─ Config 3
+     90% │       ╱
+     85% │─────  Config 1
+         └──────────────────────
+            $0.08  $0.10  $0.12
+```
+
+### Drift Detection Frequency Optimization
+
+Drift detection (measuring whether new data differs from training distribution) costs money. Run it frequently on volatile data, rarely on stable data.
+
+**Cost-quality tradeoff:**
+
+```
+Project: Financial fraud detection
+├─ Weekly drift checks: $100/week = $5,200/year
+├─ Biweekly checks: $50/week = $2,600/year
+├─ Monthly checks: $20/week = $1,040/year
+├─ Quarterly checks: $5/week = $260/year
+
+Data volatility assessment:
+├─ Measure: "Did fraud types change in last month?"
+├─ Score (0-1): 0.45 (moderate change)
+├─ Recommendation: Biweekly checks
+├─ Rationale: Moderate change detected 1x/month on average.
+│  Biweekly checks catch drift within 2 weeks. Monthly might miss critical changes.
+└─ Cost: $2,600/year vs $5,200 (weekly) = $2,600 savings, no quality loss
+```
+
+**Decision framework:**
+```
+Data Stability Score | Recommended Frequency | Cost/Year
+0.0-0.3 (volatile)  | Weekly              | $5,200
+0.3-0.6 (moderate)  | Biweekly            | $2,600
+0.6-0.85 (stable)   | Monthly             | $1,040
+0.85-1.0 (very stable) | Quarterly        | $260
+```
+
+For most projects, stability is 0.6-0.75 (monthly checks sufficient). Weekly checks are overkill unless data is highly unstable or regulatory requirements mandate frequent monitoring.
+
+### Comprehensive Cost Efficiency Report
+
+Project leads see this view:
+
+```
+───────────────────────────────────────────
+PROJECT COST EFFICIENCY REPORT
+───────────────────────────────────────────
+
+Project: Training Data for Fraud Detection
+Period: Q1 2026 (Jan-Mar)
+Status: COMPLETED
+
+Cost Breakdown:
+├─ Annotator labor: $4,200 (70%)
+├─ Consensus review: $900 (15%)
+├─ Golden set evaluation: $600 (10%)
+├─ Infrastructure: $300 (5%)
+└─ Total: $6,000
+
+Efficiency Metrics:
+├─ Total labels: 50,000
+├─ Cost per label: $0.12
+├─ Average annotator accuracy: 93%
+├─ Consensus stages: 2 (1 annotator + 10% review)
+├─ Active learning: Enabled
+└─ Drift checks: Monthly ($1,040/year)
+
+Optimization Opportunities:
+├─ MEDIUM: Reduce golden set rate from 10% to 3% for senior annotators
+│  Savings: $300/year
+│  Impact: Low risk (senior accuracy 97%, can tolerate reduced monitoring)
+│
+├─ LOW: Data stability is 0.72 (moderate-stable). Current weekly drift
+│  checks are overkill. Reduce to monthly.
+│  Savings: $4,160/year
+│  Impact: None if data doesn't change; detect drift within 1 month instead of 1 week
+│
+└─ HIGH: Model-assisted pre-labeling (see config recommendation below)
+   Savings: 35% cost reduction ($2,100/year)
+   Impact: Requires training initial model. 3-week investment.
+
+Recommended Configuration:
+├─ Enable model-assisted annotation
+├─ Reduce golden set to 3% (senior annotators)
+├─ Maintain 2-stage consensus for quality
+├─ Monthly (not weekly) drift detection
+└─ Projected cost-per-label: $0.075 (37% reduction)
+
+Comparison:
+├─ Current: $0.12 per label (50,000 labels = $6,000)
+├─ Optimized: $0.075 per label (50,000 labels = $3,750)
+└─ Savings: $2,250 on this project
+```
+
+This is what data ops managers use to justify investments (model training, consensus reviews) or optimize spending.
